@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { storage } from '../utils/storage'
 import { callOpenAIStream } from '../utils/api'
 import { getCharacters, getChapters } from '../utils/storageWrapper'
+import Modal from './Modal'
 import type { ApiConfig, ModelConfig, Character, Chapter } from '../types'
 
 interface AiInputProps {
@@ -41,6 +42,24 @@ export default function AiInput({
   const [chapterTab, setChapterTab] = useState<'content' | 'description'>('content')
   const [selectedChapterContents, setSelectedChapterContents] = useState<string[]>([])
   const [selectedChapterDescriptions, setSelectedChapterDescriptions] = useState<string[]>([])
+
+  // 添加用于非流式输出的内容预览状态
+  const [showPreview, setShowPreview] = useState(false)
+  const [previewContent, setPreviewContent] = useState('')
+  
+  // 使用useRef来跟踪完整内容
+  const fullContentRef = useRef('')
+  const allContentRef = useRef('')  // 用于跟踪所有内容，包括原始数据
+  
+  // 添加一个ref来引用预览窗口的滚动容器
+  const previewScrollRef = useRef<HTMLDivElement>(null)
+
+  // 当预览内容更新时，自动滚动到底部
+  useEffect(() => {
+    if (showPreview && previewScrollRef.current) {
+      previewScrollRef.current.scrollTop = previewScrollRef.current.scrollHeight;
+    }
+  }, [previewContent, showPreview])
 
   useEffect(() => {
     const settings = storage.getSettings()
@@ -86,7 +105,9 @@ export default function AiInput({
     }
 
     setIsGenerating(true)
-    let fullContent = ''
+    // 重置内容引用
+    fullContentRef.current = ''
+    allContentRef.current = '' // 重置所有内容
     
     try {
       const selectedApi = apis.find(api => api.id === selectedApiId)
@@ -133,22 +154,52 @@ export default function AiInput({
         })
       }
 
+      // 如果没有提供onStreaming回调，我们仍然需要显示生成的内容
+      if (!onStreaming) {
+        setShowPreview(true)
+        setPreviewContent('') // 初始化为空
+        allContentRef.current = '' // 初始化所有内容
+      }
+
       await callOpenAIStream(
         prompt, 
         enhancedSystemPrompt, 
         selectedModel, 
         selectedApi,
         enableThinking ? thinkingTokens : 0,
-        (chunk) => {
-          fullContent += chunk
+        (chunk, fullText) => {
+          // 累积格式化内容
+          if (chunk) {
+            fullContentRef.current = fullText
+          }
+          
           if (onStreaming) {
-            onStreaming(fullContent)
+            // 如果有onStreaming回调，传递格式化内容
+            onStreaming(fullText)
+          }
+        },
+        (rawData) => {
+          // 添加原始数据到所有内容中，用于预览
+          allContentRef.current = rawData;
+          
+          // 只有在没有onStreaming回调时才更新预览
+          if (!onStreaming) {
+            setPreviewContent(allContentRef.current)
           }
         }
       )
 
-      onGenerate(fullContent)
+      // 如果有onStreaming回调，在生成完成后关闭预览弹窗
+      if (onStreaming && showPreview) {
+        setShowPreview(false)
+      }
+
+      onGenerate(fullContentRef.current)
       setPrompt('')
+      // 在生成完成后关闭预览（如果还没有关闭的话）
+      if (showPreview) {
+        setTimeout(() => setShowPreview(false), 1000)
+      }
     } catch (error) {
       alert(`生成失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
@@ -197,6 +248,39 @@ export default function AiInput({
 
   return (
     <div className={`bg-slate-800 rounded-xl border border-slate-700 p-4 ${className}`}>
+      {/* 预览弹窗 */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-800 border border-slate-600 rounded-xl max-w-2xl w-full max-h-96 overflow-hidden flex flex-col">
+            <div className="p-4 border-b border-slate-700 flex justify-between items-center">
+              <h3 className="text-lg font-semibold text-white">AI 生成内容预览</h3>
+              <button 
+                className="text-slate-400 hover:text-white"
+                onClick={() => setShowPreview(false)}
+              >
+                ✕
+              </button>
+            </div>
+            <div 
+              ref={previewScrollRef} 
+              className="p-4 overflow-y-auto flex-grow bg-slate-900"
+            >
+              <pre className="whitespace-pre-wrap break-words text-slate-300">
+                {previewContent || '正在生成...'}
+              </pre>
+            </div>
+            <div className="p-4 border-t border-slate-700 flex justify-end">
+              <button
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                onClick={() => setShowPreview(false)}
+              >
+                关闭预览
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="space-y-3">
         {showModelSelector && (
           <div className="space-y-2">
@@ -306,90 +390,88 @@ export default function AiInput({
         )}
 
         {/* 上下文选择器 Modal */}
-        {showContextSelector && (
-          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-            <div className="bg-slate-800 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-              <div className="p-4 border-b border-slate-700">
-                <h3 className="text-lg font-semibold text-white">添加上下文参考</h3>
+        <Modal
+          isOpen={showContextSelector}
+          onClose={() => setShowContextSelector(false)}
+          title="添加上下文参考"
+          maxWidth="2xl"
+          footer={
+            <button 
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              onClick={() => setShowContextSelector(false)}
+            >
+              关闭
+            </button>
+          }
+        >
+          <div className="space-y-4">
+            {characters.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-slate-300 block mb-2">选择人物：</label>
+                <div className="flex flex-wrap gap-2">
+                  {characters.map(char => (
+                    <button
+                      key={char.id}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        selectedCharacters.includes(char.id)
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                      onClick={() => toggleCharacter(char.id)}
+                    >
+                      {char.name}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="p-4 space-y-4 overflow-y-auto flex-1">
-                {characters.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-2">选择人物：</label>
-                    <div className="flex flex-wrap gap-2">
-                      {characters.map(char => (
-                        <button
-                          key={char.id}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            selectedCharacters.includes(char.id)
-                              ? 'bg-blue-600 text-white'
-                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                          }`}
-                          onClick={() => toggleCharacter(char.id)}
-                        >
-                          {char.name}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                
-                {chapters.length > 0 && (
-                  <div>
-                    <label className="text-sm font-medium text-slate-300 block mb-2">选择章节：</label>
-                    <div className="mb-3 bg-slate-700 rounded-lg p-1 inline-flex">
-                      <button
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                          chapterTab === 'content'
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                        }`}
-                        onClick={() => setChapterTab('content')}
-                      >
-                        📄 正文
-                      </button>
-                      <button
-                        className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                          chapterTab === 'description'
-                            ? 'bg-purple-600 text-white shadow-sm'
-                            : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                        }`}
-                        onClick={() => setChapterTab('description')}
-                      >
-                        📝 描述
-                      </button>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {chapters.map(chap => (
-                        <button
-                          key={chap.id}
-                          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                            chapterTab === 'content' && selectedChapterContents.includes(chap.id)
-                              ? 'bg-purple-600 text-white'
-                              : chapterTab === 'description' && selectedChapterDescriptions.includes(chap.id)
-                              ? 'bg-purple-600 text-white'
-                              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                          }`}
-                          onClick={() => toggleChapter(chap.id)}
-                        >
-                          #{chap.order} {chap.title}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            )}
+            
+            {chapters.length > 0 && (
+              <div>
+                <label className="text-sm font-medium text-slate-300 block mb-2">选择章节：</label>
+                <div className="mb-3 bg-slate-700 rounded-lg p-1 inline-flex">
+                  <button
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      chapterTab === 'content'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                    }`}
+                    onClick={() => setChapterTab('content')}
+                  >
+                    📄 正文
+                  </button>
+                  <button
+                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
+                      chapterTab === 'description'
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                    }`}
+                    onClick={() => setChapterTab('description')}
+                  >
+                    📝 描述
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {chapters.map(chap => (
+                    <button
+                      key={chap.id}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                        chapterTab === 'content' && selectedChapterContents.includes(chap.id)
+                          ? 'bg-purple-600 text-white'
+                          : chapterTab === 'description' && selectedChapterDescriptions.includes(chap.id)
+                          ? 'bg-purple-600 text-white'
+                          : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                      }`}
+                      onClick={() => toggleChapter(chap.id)}
+                    >
+                      #{chap.order} {chap.title}
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div className="p-4 border-t border-slate-700 flex justify-end gap-2">
-                <button 
-                  className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
-                  onClick={() => setShowContextSelector(false)}
-                >
-                  关闭
-                </button>
-              </div>
-            </div>
+            )}
           </div>
-        )}
+        </Modal>
 
         <div>
           <textarea

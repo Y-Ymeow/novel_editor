@@ -48,7 +48,8 @@ export async function callOpenAIStream(
   model?: string,
   apiConfig?: any,
   thinkingTokens: number = 0,
-  onChunk?: (chunk: string) => void
+  onChunk?: (chunk: string, fullText: string) => void,
+  onRawData?: (rawData: string) => void
 ): Promise<string> {
   const settings = storage.getSettings()
   const selectedApi = apiConfig || settings.apis.find(api => api.id === settings.selectedApiId)
@@ -97,6 +98,7 @@ export async function callOpenAIStream(
 
   const decoder = new TextDecoder()
   let fullContent = ''
+  let dataContent = ''
 
   while (true) {
     const { done, value } = await reader.read()
@@ -110,17 +112,36 @@ export async function callOpenAIStream(
         const data = line.slice(6)
         if (data === '[DONE]') continue
 
+
+
         try {
           const parsed = JSON.parse(data)
+          // 检查是否有推理内容
+          const reasoningContent = parsed.choices[0]?.delta?.reasoning_content || ''
           const content = parsed.choices[0]?.delta?.content || ''
-          if (content) {
-            fullContent += content
+          
+          // 如果有推理内容，使用推理内容；否则使用正常内容
+          const actualContent = reasoningContent || content
+          
+          if (actualContent) {
+            fullContent += actualContent
+            dataContent += content
+
+            if (dataContent == '```json') {
+              dataContent = '';
+            }
+            // 调用原始数据回调，无论是否为有效JSON
+            if (onRawData) {
+              onRawData(fullContent)
+            }
             if (onChunk) {
-              onChunk(content)
+              onChunk(content, dataContent)
             }
           }
         } catch (e) {
-          // 忽略解析错误
+          // JSON解析失败，这可能是因为数据不是有效的JSON
+          // 但我们已经在前面调用了onRawData，所以这里不需要额外处理
+          // 保持原有逻辑，只处理有效的JSON数据到fullContent
         }
       }
     }

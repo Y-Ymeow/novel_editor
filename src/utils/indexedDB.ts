@@ -58,11 +58,23 @@ class IndexedDBStorage {
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction(storeName, 'readwrite')
       const store = transaction.objectStore(storeName)
-      
+
       data.forEach(item => store.put(item))
 
       transaction.onerror = () => reject(transaction.error)
       transaction.oncomplete = () => resolve()
+    })
+  }
+
+  private async deleteById(storeName: string, id: string): Promise<void> {
+    if (!this.db) await this.init()
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(storeName, 'readwrite')
+      const store = transaction.objectStore(storeName)
+      const request = store.delete(id)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
     })
   }
 
@@ -98,6 +110,45 @@ class IndexedDBStorage {
     return this.putAll(STORES.CHARACTERS, characters)
   }
 
+  async createCharacter(character: Character): Promise<void> {
+    if (!this.db) await this.init()
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(STORES.CHARACTERS, 'readwrite')
+      const store = transaction.objectStore(STORES.CHARACTERS)
+      const request = store.put(character)
+
+      request.onerror = () => reject(request.error)
+      request.onsuccess = () => resolve()
+    })
+  }
+
+  async updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
+    if (!this.db) await this.init()
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(STORES.CHARACTERS, 'readwrite')
+      const store = transaction.objectStore(STORES.CHARACTERS)
+
+      const getRequest = store.get(id)
+      getRequest.onerror = () => reject(getRequest.error)
+      getRequest.onsuccess = () => {
+        const existing = getRequest.result
+        if (!existing) {
+          reject(new Error(`Character with id ${id} not found`))
+          return
+        }
+
+        const updated = { ...existing, ...updates }
+        const putRequest = store.put(updated)
+        putRequest.onerror = () => reject(putRequest.error)
+        putRequest.onsuccess = () => resolve()
+      }
+    })
+  }
+
+  async deleteCharacter(id: string): Promise<void> {
+    return this.deleteById(STORES.CHARACTERS, id)
+  }
+
   // Chapters
   async getChapters(): Promise<Chapter[]> {
     return this.getAll<Chapter>(STORES.CHAPTERS)
@@ -105,6 +156,10 @@ class IndexedDBStorage {
 
   async saveChapters(chapters: Chapter[]): Promise<void> {
     return this.putAll(STORES.CHAPTERS, chapters)
+  }
+
+  async deleteChapter(id: string): Promise<void> {
+    return this.deleteById(STORES.CHAPTERS, id)
   }
 
   // Backup & Restore

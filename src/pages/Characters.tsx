@@ -2,8 +2,12 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Character } from '../types'
 import { storage } from '../utils/storage'
-import { getCharacters, saveCharacters } from '../utils/storageWrapper'
+import { getCharacters, deleteCharacter, updateCharacter, createCharacter } from '../utils/storageWrapper'
+import { getNovels } from '../utils/storageWrapper'
+import { buildCharacterPrompt } from '../utils/promptManager'
+import Modal from '../components/Modal'
 import AiInput from '../components/AiInput'
+import FullscreenTextarea from '../components/FullscreenTextarea'
 
 interface FieldHistory {
   [key: string]: string[]
@@ -16,6 +20,7 @@ export default function Characters() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null)
   const [currentNovelId, setCurrentNovelId] = useState<string | null>(null)
+  const [currentNovel, setCurrentNovel] = useState<any>(null)
   
   const [formData, setFormData] = useState({
     name: '',
@@ -40,9 +45,10 @@ export default function Characters() {
   useEffect(() => {
     const settings = storage.getSettings()
     setCurrentNovelId(settings.selectedNovelId)
-    
+
     if (settings.selectedNovelId) {
       loadCharacters(settings.selectedNovelId)
+      loadNovel(settings.selectedNovelId)
     }
   }, [])
 
@@ -51,38 +57,50 @@ export default function Characters() {
     setCharacters(loaded)
   }
 
+  const loadNovel = async (novelId: string) => {
+    const novels = await getNovels()
+    const novel = novels.find((n) => n.id === novelId)
+    if (novel) {
+      setCurrentNovel(novel)
+    }
+  }
+
   const handleSave = async () => {
     if (!formData.name.trim()) {
       alert('请输入姓名')
       return
     }
-    
+
     if (!currentNovelId) {
       alert('请先选择小说')
       return
     }
-    
+
     if (editingId) {
-      const updated = characters.map(char => 
-        char.id === editingId 
+      // 编辑模式：更新现有人物
+      await updateCharacter(editingId, formData)
+      // 更新本地状态
+      const updated = characters.map(char =>
+        char.id === editingId
           ? { ...char, ...formData }
           : char
       )
       setCharacters(updated)
-      await saveCharacters(updated)
-      setEditingId(null)
     } else {
+      // 创建模式：创建新人物
       const newCharacter: Character = {
         id: Date.now().toString(),
         novelId: currentNovelId,
         ...formData,
         createdAt: Date.now(),
       }
+      await createCharacter(newCharacter)
+      // 更新本地状态
       setCharacters([...characters, newCharacter])
-      await saveCharacters([...characters, newCharacter])
     }
-    
+
     setShowModal(false)
+    setEditingId(null)
     resetForm()
   }
 
@@ -111,9 +129,13 @@ export default function Characters() {
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这个人物吗？')) {
-      const updated = characters.filter(char => char.id !== id)
-      setCharacters(updated)
-      await saveCharacters(updated)
+      // 直接删除数据库中的记录
+      await deleteCharacter(id)
+      // 更新当前显示的人物列表（只显示当前小说的）
+      if (currentNovelId) {
+        const allCharacters = await getCharacters(currentNovelId)
+        setCharacters(allCharacters)
+      }
       if (selectedCharacter?.id === id) {
         setSelectedCharacter(null)
       }
@@ -168,6 +190,17 @@ export default function Characters() {
     return (fieldHistory[field] || []).length > 1
   }
 
+  const buildCharacterGenerationPrompt = (input: string) => {
+    const novelTitle = currentNovel?.title || ""
+    const novelDescription = currentNovel?.description || ""
+
+    return buildCharacterPrompt(
+      novelTitle,
+      novelDescription,
+      input
+    )
+  }
+
   const handleAiGenerate = (generated: string) => {
     try {
       // 尝试提取 JSON
@@ -216,8 +249,12 @@ export default function Characters() {
       // 更新表单数据
       setFormData(newFormData)
       setFieldHistory(newFieldHistory)
-      setEditingId(null)
       
+      // 确保在AI生成后仍然保持编辑状态
+      if (editingId) {
+        setEditingId(editingId); // 保持编辑状态不变
+      }
+
       alert('人物信息已生成！请在下方表单中查看并保存。')
     } catch (error) {
       console.error('解析 AI 返回内容失败:', error)
@@ -274,11 +311,11 @@ export default function Characters() {
                     <div className="p-5">
                       <div className="flex items-start gap-3 mb-3">
                         {char.avatar ? (
-                          <img src={char.avatar} alt={char.name} className="w-14 h-14 rounded-xl object-cover flex-shrink-0" />
+                          <img src={char.avatar} alt={char.name} className="w-14 h-14 rounded-xl object-cover shrink-0" />
                         ) : (
-                          <div className="w-14 h-14 rounded-xl bg-slate-700 flex items-center justify-center text-2xl flex-shrink-0">👤</div>
+                          <div className="w-14 h-14 rounded-xl bg-slate-700 flex items-center justify-center text-2xl shrink-0">👤</div>
                         )}
-                        <div className="flex-grow min-w-0">
+                        <div className="grow min-w-0">
                           <h3 className="font-bold text-lg truncate">{char.name}</h3>
                           <div className="text-xs text-slate-500">
                             {char.gender && <span className="mr-2">{char.gender}</span>}
@@ -342,35 +379,38 @@ export default function Characters() {
         )}
       </div>
 
-      {/* Modal */}
-      {showModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={() => setShowModal(false)} />
-          <div className="relative bg-slate-800 rounded-2xl border border-slate-700 w-full max-w-3xl max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
-            <div className="flex items-center justify-between p-4 border-b border-slate-700">
-              <h2 className="text-xl font-semibold">{editingId ? '编辑人物' : '新建人物'}</h2>
-              <button 
-                className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-                onClick={() => setShowModal(false)}
-              >
-                <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            {/* Modal Body */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* AI 生成部分 */}
-              <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
-                <h3 className="text-lg font-semibold mb-3">🤖 AI 生成</h3>
-                <AiInput 
-                  onGenerate={handleAiGenerate}
-                  placeholder="描述你想要创建的人物，例如：一个冷酷的刺客，身穿黑色风衣，有着神秘的过去..."
-                  buttonText="🚀 生成人物卡片"
-                  currentNovelId={currentNovelId}
-                  systemPrompt={`你是一个专业的小说人物创作助手。请根据用户的描述生成详细的人物卡片信息。
+      <Modal
+        isOpen={showModal}
+        onClose={() => { setShowModal(false); setEditingId(null); resetForm() }}
+        title={editingId ? '编辑人物' : '新建人物'}
+        maxWidth="2xl"
+        footer={
+          <div className="flex gap-2">
+            <button 
+              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" 
+              onClick={handleSave}
+            >
+              保存
+            </button>
+            <button 
+              className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
+              onClick={() => { setShowModal(false); setEditingId(null); resetForm() }}
+            >
+              取消
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* AI 生成部分 */}
+          <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
+            <h3 className="text-lg font-semibold mb-3">🤖 AI 生成</h3>
+            <AiInput
+              onGenerate={handleAiGenerate}
+              placeholder="描述你想要创建的人物，例如：一个冷酷的刺客，身穿黑色风衣，有着神秘的过去..."
+              buttonText="🚀 生成人物卡片"
+              currentNovelId={currentNovelId}
+              systemPrompt={`${buildCharacterGenerationPrompt('')}你是一个专业的小说人物创作助手。请根据用户的描述生成详细的人物卡片信息。
 返回格式必须是 JSON 对象，包含以下字段：
 - name: 姓名
 - gender: 性别
@@ -384,168 +424,154 @@ export default function Characters() {
 
 只返回 JSON，不要其他文字。
 
-${editingId ? `当前已有数据（可以在此基础上更新）：
-姓名：${formData.name}
-性别：${formData.gender}
-性格：${formData.personality}
-背景：${formData.background}
-关系：${formData.relationships}
-备注：${formData.notes}` : ''}`}
+${editingId ? `这是更新现有的人物，请基于以下当前数据进行修改或完善：
+当前数据：
+- 姓名：${formData.name}
+- 性别：${formData.gender}
+- 性格：${formData.personality}
+- 背景：${formData.background}
+- 关系：${formData.relationships}
+- 备注：${formData.notes}
+
+请生成更新后的完整数据，保持人物的基本特征，但根据用户描述进行修改。` : '这是创建新人物，请生成完整的新人物数据。'}`}
+            />
+          </div>
+
+          {/* 表单部分 */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-slate-300">姓名 *</label>
+                  {canUndo('name') && (
+                    <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('name')}>
+                      ↩ 撤回
+                    </button>
+                  )}
+                </div>
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.name}
+                  onChange={(e) => handleFieldChange('name', e.target.value)}
+                  placeholder="人物姓名"
                 />
               </div>
-
-              {/* 表单部分 */}
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-sm font-medium text-slate-300">姓名 *</label>
-                      {canUndo('name') && (
-                        <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('name')}>
-                          ↩ 撤回
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.name}
-                      onChange={(e) => handleFieldChange('name', e.target.value)}
-                      placeholder="人物姓名"
-                    />
-                  </div>
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="block text-sm font-medium text-slate-300">性别</label>
-                      {canUndo('gender') && (
-                        <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('gender')}>
-                          ↩ 撤回
-                        </button>
-                      )}
-                    </div>
-                    <input
-                      type="text"
-                      className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={formData.gender}
-                      onChange={(e) => handleFieldChange('gender', e.target.value)}
-                      placeholder="男/女/其他"
-                      list="gender-options"
-                    />
-                    <datalist id="gender-options">
-                      <option value="男" />
-                      <option value="女" />
-                      <option value="无性别" />
-                      <option value="双性" />
-                      <option value="未知" />
-                    </datalist>
-                  </div>
+              <div>
+                <div className="flex justify-between items-center mb-1">
+                  <label className="block text-sm font-medium text-slate-300">性别</label>
+                  {canUndo('gender') && (
+                    <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('gender')}>
+                      ↩ 撤回
+                    </button>
+                  )}
                 </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-300">头像 URL</label>
-                    {canUndo('avatar') && (
-                      <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('avatar')}>
-                        ↩ 撤回
-                      </button>
-                    )}
-                  </div>
-                  <input
-                    type="text"
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={formData.avatar}
-                    onChange={(e) => handleFieldChange('avatar', e.target.value)}
-                    placeholder="https://..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-300">性格特点</label>
-                    {canUndo('personality') && (
-                      <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('personality')}>
-                        ↩ 撤回
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    rows={2}
-                    value={formData.personality}
-                    onChange={(e) => handleFieldChange('personality', e.target.value)}
-                    placeholder="描述人物的性格特点..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-300">背景故事</label>
-                    {canUndo('background') && (
-                      <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('background')}>
-                          ↩ 撤回
-                        </button>
-                    )}
-                  </div>
-                  <textarea
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    rows={2}
-                    value={formData.background}
-                    onChange={(e) => handleFieldChange('background', e.target.value)}
-                    placeholder="人物的背景故事..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-300">人物关系</label>
-                    {canUndo('relationships') && (
-                      <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('relationships')}>
-                        ↩ 撤回
-                      </button>
-                    )}
-                  </div>
-                  <textarea
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    rows={2}
-                    value={formData.relationships}
-                    onChange={(e) => handleFieldChange('relationships', e.target.value)}
-                    placeholder="与其他人物的关系..."
-                  />
-                </div>
-
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="block text-sm font-medium text-slate-300">备注</label>
-                    {canUndo('notes') && (
-                      <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('notes')}>
-                          ↩ 撤回
-                        </button>
-                    )}
-                  </div>
-                  <textarea
-                    className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                    rows={2}
-                    value={formData.notes}
-                    onChange={(e) => handleFieldChange('notes', e.target.value)}
-                    placeholder="其他备注信息..."
-                  />
-                </div>
+                <input
+                  type="text"
+                  className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  value={formData.gender}
+                  onChange={(e) => handleFieldChange('gender', e.target.value)}
+                  placeholder="男/女/其他"
+                  list="gender-options"
+                />
+                <datalist id="gender-options">
+                  <option value="男" />
+                  <option value="女" />
+                  <option value="无性别" />
+                  <option value="双性" />
+                  <option value="未知" />
+                </datalist>
               </div>
             </div>
 
-            {/* Modal Footer */}
-            <div className="p-4 border-t border-slate-700 flex gap-2">
-              <button className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" onClick={handleSave}>保存</button>
-              <button 
-                className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
-                onClick={() => { setShowModal(false); setEditingId(null); resetForm() }}
-              >
-                取消
-              </button>
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">头像 URL</label>
+                {canUndo('avatar') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('avatar')}>
+                    ↩ 撤回
+                  </button>
+                )}
+              </div>
+              <input
+                type="text"
+                className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                value={formData.avatar}
+                onChange={(e) => handleFieldChange('avatar', e.target.value)}
+                placeholder="https://..."
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">性格特点</label>
+                {canUndo('personality') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('personality')}>
+                    ↩ 撤回
+                  </button>
+                )}
+              </div>
+              <FullscreenTextarea
+                value={formData.personality}
+                onChange={(value) => handleFieldChange('personality', value)}
+                placeholder="描述人物的性格特点..."
+                className="h-20"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">背景故事</label>
+                {canUndo('background') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('background')}>
+                      ↩ 撤回
+                    </button>
+                )}
+              </div>
+              <FullscreenTextarea
+                value={formData.background}
+                onChange={(value) => handleFieldChange('background', value)}
+                placeholder="人物的背景故事..."
+                className="h-20"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">人物关系</label>
+                {canUndo('relationships') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('relationships')}>
+                    ↩ 撤回
+                  </button>
+                )}
+              </div>
+              <FullscreenTextarea
+                value={formData.relationships}
+                onChange={(value) => handleFieldChange('relationships', value)}
+                placeholder="与其他人物的关系..."
+                className="h-20"
+              />
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">备注</label>
+                {canUndo('notes') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('notes')}>
+                      ↩ 撤回
+                    </button>
+                )}
+              </div>
+              <FullscreenTextarea
+                value={formData.notes}
+                onChange={(value) => handleFieldChange('notes', value)}
+                placeholder="其他备注信息..."
+                className="h-20"
+              />
             </div>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   )
 }

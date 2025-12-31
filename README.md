@@ -125,7 +125,10 @@ src/
 ├── components/       # 组件
 │   ├── AiInput.tsx          # AI 输入组件
 │   ├── FullscreenTextarea.tsx # 全屏文本编辑器
-│   └── Navbar.tsx           # 导航栏
+│   ├── Modal.tsx            # 模态框组件
+│   ├── CreateNovelModal.tsx # 创建小说模态框
+│   ├── EditChapterDescriptionModal.tsx # 编辑章节描述模态框
+│   └── CreateChapterModal.tsx # 创建章节模态框
 ├── pages/            # 页面
 │   ├── Chapters.tsx         # 章节管理
 │   ├── Characters.tsx       # 人物管理

@@ -72,6 +72,57 @@ export async function saveChapters(chapters: Chapter[]): Promise<void> {
   }
 }
 
+export async function createCharacter(character: Character): Promise<void> {
+  const settings = storage.getSettings()
+  if (settings.storageType === 'indexedDB') {
+    await indexedDBStorage.createCharacter(character)
+  } else {
+    // 对于LocalStorage，需要获取所有数据，添加新记录后重新保存
+    const characters = await getCharacters()
+    characters.push(character)
+    await saveCharacters(characters)
+  }
+}
+
+export async function updateCharacter(id: string, updates: Partial<Character>): Promise<void> {
+  const settings = storage.getSettings()
+  if (settings.storageType === 'indexedDB') {
+    await indexedDBStorage.updateCharacter(id, updates)
+  } else {
+    // 对于LocalStorage，需要获取所有数据，更新后重新保存
+    const characters = await getCharacters()
+    const index = characters.findIndex(char => char.id === id)
+    if (index !== -1) {
+      characters[index] = { ...characters[index], ...updates }
+      await saveCharacters(characters)
+    }
+  }
+}
+
+export async function deleteCharacter(id: string): Promise<void> {
+  const settings = storage.getSettings()
+  if (settings.storageType === 'indexedDB') {
+    await indexedDBStorage.deleteCharacter(id)
+  } else {
+    // 对于LocalStorage，需要获取所有数据，过滤后重新保存
+    const characters = await getCharacters()
+    const updated = characters.filter(char => char.id !== id)
+    await saveCharacters(updated)
+  }
+}
+
+export async function deleteChapter(id: string): Promise<void> {
+  const settings = storage.getSettings()
+  if (settings.storageType === 'indexedDB') {
+    await indexedDBStorage.deleteChapter(id)
+  } else {
+    // 对于LocalStorage，需要获取所有数据，过滤后重新保存
+    const chapters = await getChapters()
+    const updated = chapters.filter(ch => ch.id !== id)
+    await saveChapters(updated)
+  }
+}
+
 export async function exportBackup(): Promise<string> {
   const settings = localStorage.getSettings()
   
