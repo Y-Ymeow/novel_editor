@@ -42,6 +42,8 @@ export default function AiInput({
   const [chapterTab, setChapterTab] = useState<'content' | 'description'>('content')
   const [selectedChapterContents, setSelectedChapterContents] = useState<string[]>([])
   const [selectedChapterDescriptions, setSelectedChapterDescriptions] = useState<string[]>([])
+  const [characterTab, setCharacterTab] = useState<'summary' | 'full'>('summary') // 添加人物信息显示选项
+  const [chapterContentTab, setChapterContentTab] = useState<'summary' | 'full'>('summary') // 添加章节内容显示选项
 
   // 添加用于非流式输出的内容预览状态
   const [showPreview, setShowPreview] = useState(false)
@@ -129,7 +131,15 @@ export default function AiInput({
         selectedCharacters.forEach(charId => {
           const char = characters.find(c => c.id === charId)
           if (char) {
-            enhancedSystemPrompt += `- ${char.name}：${char.personality || char.background || '暂无描述'}\n`
+            let charDescription = '';
+            if (characterTab === 'summary') {
+              // 如果有摘要则使用摘要，否则使用性格或背景的简短描述
+              charDescription = char.summary || `${char.personality || ''} ${char.background || ''}`.trim() || '暂无描述'
+            } else {
+              // 使用完整的人物信息
+              charDescription = `姓名：${char.name}，性别：${char.gender || '未指定'}，性格：${char.personality || '未填写'}，背景：${char.background || '未填写'}，关系：${char.relationships || '未填写'}，备注：${char.notes || '无'}`
+            }
+            enhancedSystemPrompt += `- ${char.name}：${charDescription}\n`
           }
         })
       }
@@ -140,7 +150,16 @@ export default function AiInput({
         selectedChapterContents.forEach(chapId => {
           const chap = chapters.find(c => c.id === chapId)
           if (chap) {
-            enhancedSystemPrompt += `章节 ${chap.order}：${chap.title}\n内容：${chap.content.slice(-500)}...\n`
+            let chapterContent = '';
+            if (chapterContentTab === 'summary') {
+              // 使用章节标题和内容的简短摘要
+              const contentPreview = chap.content ? `${chap.content.substring(0, 200)}...` : '无内容'
+              chapterContent = `章节 ${chap.order}：${chap.title} - ${contentPreview}`
+            } else {
+              // 使用完整的章节内容
+              chapterContent = `章节 ${chap.order}：${chap.title}\n内容：${chap.content || '无内容'}`
+            }
+            enhancedSystemPrompt += `${chapterContent}\n`
           }
         })
       }
@@ -149,7 +168,15 @@ export default function AiInput({
         selectedChapterDescriptions.forEach(chapId => {
           const chap = chapters.find(c => c.id === chapId)
           if (chap && chap.description) {
-            enhancedSystemPrompt += `章节 ${chap.order}：${chap.title}\n描述：${chap.description}\n`
+            let chapterDescription = '';
+            if (chapterContentTab === 'summary') {
+              // 使用简短的描述
+              chapterDescription = `章节 ${chap.order}：${chap.title}\n描述：${chap.description}`
+            } else {
+              // 使用完整的描述信息
+              chapterDescription = `章节 ${chap.order}：${chap.title}\n完整描述：${chap.description}`
+            }
+            enhancedSystemPrompt += `${chapterDescription}\n`
           }
         })
       }
@@ -407,7 +434,31 @@ export default function AiInput({
           <div className="space-y-4">
             {characters.length > 0 && (
               <div>
-                <label className="text-sm font-medium text-slate-300 block mb-2">选择人物：</label>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-sm font-medium text-slate-300">选择人物：</label>
+                  <div className="flex bg-slate-700 rounded-lg p-1">
+                    <button
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                        characterTab === 'summary'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      onClick={() => setCharacterTab('summary')}
+                    >
+                      📝 摘要
+                    </button>
+                    <button
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                        characterTab === 'full'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      onClick={() => setCharacterTab('full')}
+                    >
+                      📄 全文
+                    </button>
+                  </div>
+                </div>
                 <div className="flex flex-wrap gap-2">
                   {characters.map(char => (
                     <button
@@ -428,28 +479,52 @@ export default function AiInput({
             
             {chapters.length > 0 && (
               <div>
-                <label className="text-sm font-medium text-slate-300 block mb-2">选择章节：</label>
-                <div className="mb-3 bg-slate-700 rounded-lg p-1 inline-flex">
-                  <button
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      chapterTab === 'content'
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                    }`}
-                    onClick={() => setChapterTab('content')}
-                  >
-                    📄 正文
-                  </button>
-                  <button
-                    className={`px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                      chapterTab === 'description'
-                        ? 'bg-purple-600 text-white shadow-sm'
-                        : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                    }`}
-                    onClick={() => setChapterTab('description')}
-                  >
-                    📝 描述
-                  </button>
+                <div className="flex items-center gap-2 mb-2">
+                  <label className="text-sm font-medium text-slate-300">选择章节：</label>
+                  <div className="flex bg-slate-700 rounded-lg p-1 mr-2">
+                    <button
+                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                        chapterTab === 'content'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                      }`}
+                      onClick={() => setChapterTab('content')}
+                    >
+                      📄 正文
+                    </button>
+                    <button
+                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors ${
+                        chapterTab === 'description'
+                          ? 'bg-purple-600 text-white shadow-sm'
+                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
+                      }`}
+                      onClick={() => setChapterTab('description')}
+                    >
+                      📝 描述
+                    </button>
+                  </div>
+                  <div className="flex bg-slate-700 rounded-lg p-1">
+                    <button
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                        chapterContentTab === 'summary'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      onClick={() => setChapterContentTab('summary')}
+                    >
+                      📝 摘要
+                    </button>
+                    <button
+                      className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
+                        chapterContentTab === 'full'
+                          ? 'bg-blue-600 text-white'
+                          : 'text-slate-300 hover:text-white'
+                      }`}
+                      onClick={() => setChapterContentTab('full')}
+                    >
+                      📄 全文
+                    </button>
+                  </div>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {chapters.map(chap => (

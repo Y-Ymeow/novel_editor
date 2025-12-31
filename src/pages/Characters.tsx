@@ -30,6 +30,7 @@ export default function Characters() {
     background: '',
     relationships: '',
     notes: '',
+    summary: '', // 添加summary字段
   })
 
   const [fieldHistory, setFieldHistory] = useState<FieldHistory>({
@@ -40,6 +41,7 @@ export default function Characters() {
     background: [],
     relationships: [],
     notes: [],
+    summary: [], // 添加summary历史
   })
 
   useEffect(() => {
@@ -113,6 +115,7 @@ export default function Characters() {
       background: char.background,
       relationships: char.relationships,
       notes: char.notes,
+      summary: char.summary || '', // 添加summary
     })
     setEditingId(char.id)
     setShowModal(true)
@@ -124,6 +127,7 @@ export default function Characters() {
       background: [char.background],
       relationships: [char.relationships],
       notes: [char.notes],
+      summary: [char.summary || ''], // 添加summary历史
     })
   }
 
@@ -151,6 +155,7 @@ export default function Characters() {
       background: '',
       relationships: '',
       notes: '',
+      summary: '', // 添加summary字段
     })
     setFieldHistory({
       name: [],
@@ -160,6 +165,7 @@ export default function Characters() {
       background: [],
       relationships: [],
       notes: [],
+      summary: [], // 添加summary历史
     })
   }
 
@@ -233,6 +239,7 @@ export default function Characters() {
         background: toString(parsed.background) || formData.background,
         relationships: toString(parsed.relationships) || formData.relationships,
         notes: toString(parsed.notes) || formData.notes,
+        summary: toString(parsed.summary) || formData.summary, // 添加处理summary
       }
 
       // 重置表单历史
@@ -244,6 +251,7 @@ export default function Characters() {
         background: [newFormData.background],
         relationships: [newFormData.relationships],
         notes: [newFormData.notes],
+        summary: [newFormData.summary], // 添加summary历史
       }
 
       // 更新表单数据
@@ -261,6 +269,11 @@ export default function Characters() {
       console.error('原始内容:', generated)
       alert(`无法解析 AI 返回的内容\n\n错误: ${error instanceof Error ? error.message : '未知错误'}\n\n原始内容:\n${generated.slice(0, 200)}...`)
     }
+  }
+
+  // 处理摘要AI生成
+  const handleSummaryAiGenerate = (generated: string) => {
+    setFormData(prev => ({ ...prev, summary: generated }));
   }
 
   return (
@@ -326,6 +339,12 @@ export default function Characters() {
                       
                       {selectedCharacter?.id === char.id ? (
                         <div className="space-y-2 text-sm">
+                          {char.summary && (  // 显示摘要
+                            <div>
+                              <span className="font-medium text-slate-400">摘要：</span>
+                              <p className="text-slate-300">{char.summary}</p>
+                            </div>
+                          )}
                           {char.personality && (
                             <div>
                               <span className="font-medium text-slate-400">性格：</span>
@@ -353,7 +372,7 @@ export default function Characters() {
                         </div>
                       ) : (
                         <p className="text-sm text-slate-400 line-clamp-2">
-                          {char.personality || char.background || '点击查看详情...'}
+                          {char.summary || char.personality || char.background || '点击查看详情...'}
                         </p>
                       )}
                     </div>
@@ -419,6 +438,7 @@ export default function Characters() {
 - background: 背景故事
 - relationships: 人物关系
 - notes: 备注信息
+- summary: 人物摘要
 
 注意：所有字段值都必须是字符串类型，不要返回数组或对象。
 
@@ -432,6 +452,7 @@ ${editingId ? `这是更新现有的人物，请基于以下当前数据进行�
 - 背景：${formData.background}
 - 关系：${formData.relationships}
 - 备注：${formData.notes}
+- 摘要：${formData.summary}
 
 请生成更新后的完整数据，保持人物的基本特征，但根据用户描述进行修改。` : '这是创建新人物，请生成完整的新人物数据。'}`}
             />
@@ -567,6 +588,46 @@ ${editingId ? `这是更新现有的人物，请基于以下当前数据进行�
                 onChange={(value) => handleFieldChange('notes', value)}
                 placeholder="其他备注信息..."
                 className="h-20"
+              />
+            </div>
+
+            {/* 摘要区域 */}
+            <div>
+              <div className="flex justify-between items-center mb-1">
+                <label className="block text-sm font-medium text-slate-300">人物摘要</label>
+                {canUndo('summary') && (
+                  <button className="text-xs text-yellow-400 hover:text-yellow-300" onClick={() => handleUndo('summary')}>
+                    ↩ 撤回
+                  </button>
+                )}
+              </div>
+              <FullscreenTextarea
+                value={formData.summary}
+                onChange={(value) => handleFieldChange('summary', value)}
+                placeholder="人物的简要摘要，用于上下文参考..."
+                className="h-20"
+              />
+            </div>
+
+            {/* 摘要AI生成区域 */}
+            <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
+              <h3 className="text-lg font-semibold mb-3">🤖 生成人物摘要</h3>
+              <AiInput
+                onGenerate={handleSummaryAiGenerate}
+                placeholder="描述你想要生成的人物摘要，例如：总结这个人物的核心特征..."
+                buttonText="🚀 生成摘要"
+                currentNovelId={currentNovelId}
+                systemPrompt={`你是一个专业的小说人物摘要助手。请根据人物信息生成简洁准确的人物摘要。
+                
+当前人物信息：
+- 姓名：${formData.name}
+- 性别：${formData.gender}
+- 性格：${formData.personality}
+- 背景：${formData.background}
+- 关系：${formData.relationships}
+- 备注：${formData.notes}
+
+请生成简洁的人物摘要，包含姓名、核心性格、背景和关键关系，用于后续的上下文参考。`}
               />
             </div>
           </div>

@@ -41,6 +41,7 @@ export interface Character {
   background: string
   relationships: string
   notes: string
+  summary?: string
   createdAt: number
 }
 

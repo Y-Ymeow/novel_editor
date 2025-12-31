@@ -70,6 +70,7 @@ src/
   background: string
   relationships: string
   notes: string
+  summary?: string        // 人物摘要，用于上下文参考
   createdAt: number
 }
 ```
@@ -108,43 +109,119 @@ src/
 - 思考模式（reasoning）支持
 - 上下文参考选择（人物、章节）
 - 章节内容类型选择（正文/描述）
+- **摘要/全文模式切换**（人物和章节）
 - 流式输出显示
 
 **关键代码**:
 ```typescript
-const handleGenerate = async () => {
-  // 构建增强的 system prompt
-  let enhancedSystemPrompt = systemPrompt || ''
-  
-  // 添加选中的人物信息
-  if (selectedCharacters.length > 0) {
-    enhancedSystemPrompt += '\n\n参考人物信息：\n'
-    selectedCharacters.forEach(charId => {
-      const char = characters.find(c => c.id === charId)
-      if (char) {
-        enhancedSystemPrompt += `- ${char.name}：${char.personality || char.background || '暂无描述'}\n`
+// 添加的状态变量
+const [characterTab, setCharacterTab] = useState<'summary' | 'full'>('summary') // 人物信息显示选项
+const [chapterContentTab, setChapterContentTab] = useState<'summary' | 'full'>('summary') // 章节内容显示选项
+
+// 构建增强的 system prompt
+let enhancedSystemPrompt = systemPrompt || ''
+
+// 添加选中的人物信息
+if (selectedCharacters.length > 0) {
+  enhancedSystemPrompt += '\n\n参考人物信息：\n'
+  selectedCharacters.forEach(charId => {
+    const char = characters.find(c => c.id === charId)
+    if (char) {
+      let charDescription = '';
+      if (characterTab === 'summary') {
+        // 如果有摘要则使用摘要，否则使用性格或背景的简短描述
+        charDescription = char.summary || `${char.personality || ''} ${char.background || ''}`.trim() || '暂无描述'
+      } else {
+        // 使用完整的人物信息
+        charDescription = `姓名：${char.name}，性别：${char.gender || '未指定'}，性格：${char.personality || '未填写'}，背景：${char.background || '未填写'}，关系：${char.relationships || '未填写'}，备注：${char.notes || '无'}`
       }
-    })
-  }
-  
-  // 调用流式 API
-  await callOpenAIStream(
-    prompt,
-    enhancedSystemPrompt,
-    selectedModel,
-    selectedApi,
-    enableThinking ? thinkingTokens : 0,
-    (chunk) => {
-      fullContent += chunk
-      if (onStreaming) {
-        onStreaming(fullContent)
-      }
+      enhancedSystemPrompt += `- ${char.name}：${charDescription}\n`
     }
-  )
+  })
+}
+
+// 添加选中的章节信息
+if (selectedChapterContents.length > 0) {
+  enhancedSystemPrompt += '\n\n参考章节正文：\n'
+  selectedChapterContents.forEach(chapId => {
+    const chap = chapters.find(c => c.id === chapId)
+    if (chap) {
+      let chapterContent = '';
+      if (chapterContentTab === 'summary') {
+        // 使用章节标题和内容的简短摘要
+        const contentPreview = chap.content ? `${chap.content.substring(0, 200)}...` : '无内容'
+        chapterContent = `章节 ${chap.order}：${chap.title} - ${contentPreview}`
+      } else {
+        // 使用完整的章节内容
+        chapterContent = `章节 ${chap.order}：${chap.title}\n内容：${chap.content || '无内容'}`
+      }
+      enhancedSystemPrompt += `${chapterContent}\n`
+    }
+  })
+}
+if (selectedChapterDescriptions.length > 0) {
+  enhancedSystemPrompt += '\n\n参考章节描述：\n'
+  selectedChapterDescriptions.forEach(chapId => {
+    const chap = chapters.find(c => c.id === chapId)
+    if (chap && chap.description) {
+      let chapterDescription = '';
+      if (chapterContentTab === 'summary') {
+        // 使用简短的描述
+        chapterDescription = `章节 ${chap.order}：${chap.title}\n描述：${chap.description}`
+      } else {
+        // 使用完整的描述信息
+        chapterDescription = `章节 ${chap.order}：${chap.title}\n完整描述：${chap.description}`
+      }
+      enhancedSystemPrompt += `${chapterDescription}\n`
+    }
+  })
+}
+
+// 调用流式 API
+await callOpenAIStream(
+  prompt,
+  enhancedSystemPrompt,
+  selectedModel,
+  selectedApi,
+  enableThinking ? thinkingTokens : 0,
+  (chunk) => {
+    fullContent += chunk
+    if (onStreaming) {
+      onStreaming(fullContent)
+    }
+  }
+)
+```
+
+### 2. 人物管理页面 (Characters.tsx)
+
+**功能**:
+- 创建和编辑人物卡片
+- **新增摘要字段**
+- AI 生成人物功能
+- AI 生成摘要功能
+
+**关键代码**:
+```typescript
+// 在formData中添加summary字段
+const [formData, setFormData] = useState({
+  name: '',
+  gender: '',
+  avatar: '',
+  personality: '',
+  background: '',
+  relationships: '',
+  notes: '',
+  summary: '', // 添加摘要字段
+})
+
+// 处理摘要AI生成
+const handleSummaryAiGenerate = (generated: string) => {
+  setFormData(prev => ({ ...prev, summary: generated }));
 }
 ```
 
-### 2. Prompt 管理 (promptManager.ts)
+### 3. Prompt 管理 (promptManager.ts)
 
 **功能**:
 - 提供 4 个默认 Prompt 模板
@@ -171,7 +248,7 @@ export function buildContentPrompt(params: ContentPromptParams): string {
 }
 ```
 
-### 3. 编辑器页面 (Editor.tsx)
+### 4. 编辑器页面 (Editor.tsx)
 
 **功能**:
 - 章节列表管理（桌面端侧边栏，移动端抽屉）
@@ -201,7 +278,7 @@ useEffect(() => {
 }, [streamingContent, isStreaming])
 ```
 
-### 4. 存储系统
+### 5. 存储系统
 
 #### LocalStorage (storage.ts)
 - 简单键值对存储
@@ -372,6 +449,12 @@ A: 用户可以在设置页面编辑 Prompt，开发者可以在 `promptManager.
 
 ### Q: 如何处理大量数据？
 A: IndexedDB 和 MongoDB 支持大量数据，LocalStorage 有 5-10MB 限制，建议使用 IndexedDB 或 MongoDB。
+
+### Q: 摘要/全文切换功能如何实现？
+A: 在 `AiInput.tsx` 组件中，我们添加了两个状态变量：
+- `characterTab`：控制人物信息显示摘要还是全文
+- `chapterContentTab`：控制章节信息显示摘要还是全文
+用户可以在上下文选择器中切换这些模式，以平衡token使用和信息完整度。
 
 ## 未来扩展方向
 
