@@ -151,8 +151,14 @@ export default function Editor() {
         const currentNovelChapters = await getChapters(currentNovelId);
         setChapters(currentNovelChapters);
         if (currentChapter?.id === id) {
-          setCurrentChapter(currentNovelChapters.length > 0 ? currentNovelChapters[0] : null);
-          setContent(currentNovelChapters.length > 0 ? currentNovelChapters[0].content : "");
+          setCurrentChapter(
+            currentNovelChapters.length > 0 ? currentNovelChapters[0] : null,
+          );
+          setContent(
+            currentNovelChapters.length > 0
+              ? currentNovelChapters[0].content
+              : "",
+          );
         }
       }
     }
@@ -190,17 +196,15 @@ export default function Editor() {
     setShowEditDescription(false);
   };
 
-  const buildSystemPrompt = (selectedCharacterIds: string[] = [], selectedChapterIds: string[] = []) => {
+  const buildSystemPrompt = () => {
     const novelTitle = currentNovel?.title || "";
     const novelDescription = currentNovel?.description || "";
 
     let charactersStr = "";
     if (characters.length > 0) {
       // 只包含选中的人物，如果没有选中任何人物，则包含所有人物
-      const filteredCharacters = selectedCharacterIds.length > 0 
-        ? characters.filter(c => selectedCharacterIds.includes(c.id))
-        : characters;
-      
+      const filteredCharacters = characters;
+
       charactersStr = filteredCharacters
         .map(
           (c) => `- ${c.name}：${c.personality || c.background || "暂无描述"}`,
@@ -365,11 +369,11 @@ export default function Editor() {
 
         {/* 主内容区 */}
         <div className="flex-1 flex flex-col min-h-0">
-          <div className="p-4 border-b border-slate-700 bg-slate-800 flex-shrink-0">
+          <div className="p-4 border-b border-slate-700 bg-slate-800 shrink-0">
             <div className="flex flex-col lg:flex-row lg:justify-between lg:items-start gap-3">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <button
-                  className="lg:hidden px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors flex-shrink-0"
+                  className="lg:hidden px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors shrink-0"
                   onClick={() => setShowMobileDrawer(true)}
                 >
                   ☰ 章节列表
@@ -392,7 +396,7 @@ export default function Editor() {
                   )}
                 </div>
               </div>
-              <div className="flex items-center gap-2 flex-shrink-0 lg:ml-2">
+              <div className="flex items-center gap-2 shrink-0 lg:ml-2">
                 {currentChapter && (
                   <button
                     className="px-3 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors text-sm"
@@ -447,7 +451,7 @@ export default function Editor() {
               placeholder="描述你想要生成的内容，例如：主角遇到了一个神秘的人..."
               buttonText="🚀 生成内容"
               currentNovelId={currentNovelId}
-              systemPrompt={buildSystemPrompt()}  // 这个systemPrompt现在支持选中人物和章节的参数
+              systemPrompt={buildSystemPrompt()} // 这个systemPrompt现在支持选中人物和章节的参数
             />
           </div>
         </div>
@@ -570,7 +574,6 @@ export default function Editor() {
           </div>
         </>
       )}
-
 
       <EditChapterDescriptionModal
         isOpen={showEditDescription}
