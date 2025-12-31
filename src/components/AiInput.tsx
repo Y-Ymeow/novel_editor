@@ -481,28 +481,6 @@ export default function AiInput({
               <div>
                 <div className="flex items-center gap-2 mb-2">
                   <label className="text-sm font-medium text-slate-300">选择章节：</label>
-                  <div className="flex bg-slate-700 rounded-lg p-1 mr-2">
-                    <button
-                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                        chapterTab === 'content'
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                      }`}
-                      onClick={() => setChapterTab('content')}
-                    >
-                      📄 正文
-                    </button>
-                    <button
-                      className={`px-3 py-2 rounded-md text-xs font-medium transition-colors ${
-                        chapterTab === 'description'
-                          ? 'bg-purple-600 text-white shadow-sm'
-                          : 'text-slate-300 hover:text-white hover:bg-slate-600'
-                      }`}
-                      onClick={() => setChapterTab('description')}
-                    >
-                      📝 描述
-                    </button>
-                  </div>
                   <div className="flex bg-slate-700 rounded-lg p-1">
                     <button
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${

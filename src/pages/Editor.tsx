@@ -190,13 +190,18 @@ export default function Editor() {
     setShowEditDescription(false);
   };
 
-  const buildSystemPrompt = () => {
+  const buildSystemPrompt = (selectedCharacterIds: string[] = [], selectedChapterIds: string[] = []) => {
     const novelTitle = currentNovel?.title || "";
     const novelDescription = currentNovel?.description || "";
 
     let charactersStr = "";
     if (characters.length > 0) {
-      charactersStr = characters
+      // 只包含选中的人物，如果没有选中任何人物，则包含所有人物
+      const filteredCharacters = selectedCharacterIds.length > 0 
+        ? characters.filter(c => selectedCharacterIds.includes(c.id))
+        : characters;
+      
+      charactersStr = filteredCharacters
         .map(
           (c) => `- ${c.name}：${c.personality || c.background || "暂无描述"}`,
         )
@@ -442,7 +447,7 @@ export default function Editor() {
               placeholder="描述你想要生成的内容，例如：主角遇到了一个神秘的人..."
               buttonText="🚀 生成内容"
               currentNovelId={currentNovelId}
-              systemPrompt={buildSystemPrompt()}
+              systemPrompt={buildSystemPrompt()}  // 这个systemPrompt现在支持选中人物和章节的参数
             />
           </div>
         </div>

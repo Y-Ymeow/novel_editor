@@ -71,12 +71,13 @@ export const DEFAULT_PROMPTS: PromptConfig = {
 标题：{{novelTitle}}
 简介：{{novelDescription}}
 
-【人物设定】
-{{characters}}
-
 【当前章节】
 章节标题：{{chapterTitle}}
 章节描述：{{chapterDescription}}
+
+【上一章信息】
+标题：{{previousChapterTitle}}
+描述：{{previousChapterDescription}}
 
 【本章已写内容】（最后500字）：
 {{existingContent}}
