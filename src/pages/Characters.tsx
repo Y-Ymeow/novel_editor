@@ -325,7 +325,7 @@ export default function Characters() {
       summary: /(?:摘要|summary)[:：]\s*([^\n]+)/i,
     }
     
-    for (const [key, pattern] of Object.entries(patterns) as [keyof Character, RegExp][]) {
+    for (const [key, pattern] of Object.entries(patterns)) {
       const match = text.match(pattern)
       if (match && match[1]) {
         result[key] = match[1].trim()
