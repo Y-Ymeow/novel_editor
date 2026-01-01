@@ -75,7 +75,7 @@ export default function Modal({
       {/* Modal内容 */}
       <div className={`relative bg-slate-800 rounded-xl border border-slate-700 w-full ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-hidden flex flex-col shadow-2xl ${className}`}>
         {/* 标题栏 */}
-        <div className="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-4 border-b border-slate-700 shrink-0">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           {showCloseButton && (
             <button
@@ -97,7 +97,7 @@ export default function Modal({
 
         {/* 底部按钮栏 */}
         {footer && (
-          <div className="p-4 border-t border-slate-700 flex-shrink-0">
+          <div className="p-4 border-t border-slate-700 shrink-0">
             {footer}
           </div>
         )}

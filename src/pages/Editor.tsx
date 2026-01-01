@@ -13,11 +13,9 @@ import {
   buildContentPrompt,
   buildDescriptionPrompt as buildDescPrompt,
 } from "../utils/promptManager";
-import EditChapterDescriptionModal from "../components/EditChapterDescriptionModal";
-import CreateChapterModal from "../components/CreateChapterModal";
 import AiInput from "../components/AiInput";
 import FullscreenTextarea from "../components/FullscreenTextarea";
-import type { ChapterFormData } from "../components/CreateChapterModal";
+import Modal from "../components/Modal";
 
 export default function Editor() {
   const navigate = useNavigate();
@@ -34,16 +32,24 @@ export default function Editor() {
   });
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [showEditDescription, setShowEditDescription] = useState(false);
-  const [editDescription, setEditDescription] = useState("");
   const editorTextareaRef = useRef<HTMLTextAreaElement>(null);
   const [showMobileDrawer, setShowMobileDrawer] = useState(false);
+  const [showEditDescription, setShowEditDescription] = useState(false);
+  const [editDescription, setEditDescription] = useState("");
 
   const [chapterFormData, setChapterFormData] = useState({
     title: "",
     description: "",
     status: "draft" as "draft" | "in-progress" | "completed",
   });
+
+  const normalizeStatus = (
+    value: string,
+  ): "draft" | "completed" | "in-progress" => {
+    if (value == "completed") return "completed";
+    if (value == "in-progress") return "in-progress";
+    return "draft";
+  };
 
   useEffect(() => {
     if (isStreaming && editorTextareaRef.current) {
@@ -576,17 +582,65 @@ export default function Editor() {
         </>
       )}
 
-      <EditChapterDescriptionModal
+      <Modal
         isOpen={showEditDescription}
         onClose={() => setShowEditDescription(false)}
-        currentChapter={currentChapter}
-        editDescription={editDescription}
-        setEditDescription={setEditDescription}
-        onSave={handleSaveDescription}
-        buildEditDescriptionPrompt={buildEditDescriptionPrompt}
-        currentNovelId={currentNovelId}
-      />
-      <CreateChapterModal
+        title="编辑章节描述"
+        maxWidth="2xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              onClick={() => setShowEditDescription(false)}
+            >
+              取消
+            </button>
+            <button
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              onClick={handleSaveDescription}
+            >
+              保存
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              章节标题
+            </label>
+            <div className="text-slate-300">{currentChapter?.title}</div>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              章节描述
+            </label>
+            <FullscreenTextarea
+              value={editDescription}
+              onChange={setEditDescription}
+              placeholder="描述本章的主要情节和发展，用于 AI 生成内容"
+              className="h-24"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              AI 生成描述
+            </label>
+            <AiInput
+              onGenerate={(generatedDescription) => {
+                setEditDescription(generatedDescription);
+              }}
+              placeholder="描述你想要的章节内容，例如：主角遇到一个神秘人物..."
+              buttonText="✨ 生成章节描述"
+              showModelSelector={true}
+              systemPrompt={buildEditDescriptionPrompt()}
+              currentNovelId={currentNovelId}
+            />
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
         isOpen={showChapterForm}
         onClose={() => {
           setShowChapterForm(false);
@@ -596,12 +650,105 @@ export default function Editor() {
             status: "draft",
           });
         }}
-        chapterFormData={chapterFormData}
-        setChapterFormData={(data: ChapterFormData) => setChapterFormData(data)}
-        onCreate={handleCreateChapter}
-        buildDescriptionPrompt={buildDescriptionPrompt}
-        currentNovelId={currentNovelId}
-      />
+        title="创建新章节"
+        maxWidth="2xl"
+        footer={
+          <div className="flex justify-end gap-2">
+            <button
+              className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+              onClick={() => {
+                setShowChapterForm(false);
+                setChapterFormData({
+                  title: "",
+                  description: "",
+                  status: "draft",
+                });
+              }}
+            >
+              取消
+            </button>
+            <button
+              className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+              onClick={handleCreateChapter}
+            >
+              创建
+            </button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              章节标题 *
+            </label>
+            <input
+              type="text"
+              className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={chapterFormData.title}
+              onChange={(e) =>
+                setChapterFormData({
+                  ...chapterFormData,
+                  title: e.target.value,
+                })
+              }
+              placeholder="第1章：开始"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              章节描述
+            </label>
+            <FullscreenTextarea
+              value={chapterFormData.description}
+              onChange={(value) =>
+                setChapterFormData({
+                  ...chapterFormData,
+                  description: value,
+                })
+              }
+              placeholder="描述本章的主要情节和发展，用于 AI 生成内容"
+              className="h-24"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              AI 生成描述
+            </label>
+            <AiInput
+              onGenerate={(generatedDescription) => {
+                setChapterFormData({
+                  ...chapterFormData,
+                  description: generatedDescription,
+                });
+              }}
+              placeholder="描述你想要的章节内容，例如：主角遇到一个神秘人物..."
+              buttonText="✨ 生成章节描述"
+              showModelSelector={true}
+              systemPrompt={buildDescriptionPrompt()}
+              currentNovelId={currentNovelId}
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-1">
+              状态
+            </label>
+            <select
+              className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+              value={chapterFormData.status}
+              onChange={(e) =>
+                setChapterFormData({
+                  ...chapterFormData,
+                  status: normalizeStatus(e.target.value),
+                })
+              }
+            >
+              <option value="draft">草稿</option>
+              <option value="in-progress">进行中</option>
+              <option value="completed">已完成</option>
+            </select>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -23,13 +23,10 @@
 src/
 ├── components/       # 可复用组件
 │   ├── AiInput.tsx          # AI 输入组件，支持模型选择、上下文参考
-│   ├── FullscreenTextarea.tsx # 全屏文本编辑器
-│   └── Navbar.tsx           # 导航栏组件
+│   └── FullscreenTextarea.tsx # 全屏文本编辑器
 ├── pages/            # 页面组件
-│   ├── Chapters.tsx         # 章节管理页面
 │   ├── Characters.tsx       # 人物管理页面
 │   ├── Editor.tsx           # 编辑器页面（核心）
-│   ├── Novels.tsx           # 小说管理页面
 │   ├── NovelSelect.tsx      # 小说选择页面
 │   └── Settings.tsx         # 设置页面
 ├── types/            # TypeScript 类型定义
