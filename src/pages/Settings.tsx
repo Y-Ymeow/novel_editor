@@ -10,7 +10,7 @@ import * as promptManager from '../utils/promptManager'
 export default function Settings() {
   const navigate = useNavigate()
   const [activeTab, setActiveTab] = useState<'api' | 'database' | 'backup' | 'prompt'>('api')
-  
+
   const [apis, setApis] = useState<ApiConfig[]>([])
   const [selectedApiId, setSelectedApiId] = useState<string | null>(null)
   const [showApiForm, setShowApiForm] = useState(false)
@@ -57,15 +57,15 @@ export default function Settings() {
       alert('请输入 API 名称')
       return
     }
-    
+
     if (apiFormData.models.length === 0) {
       alert('请至少添加一个模型')
       return
     }
-    
+
     if (editingApiId) {
-      setApis(apis.map(api => 
-        api.id === editingApiId 
+      setApis(apis.map(api =>
+        api.id === editingApiId
           ? { ...api, ...apiFormData }
           : api
       ))
@@ -82,7 +82,7 @@ export default function Settings() {
         setSelectedApiId(newApi.id)
       }
     }
-    
+
     setShowApiForm(false)
     resetApiForm()
   }
@@ -143,7 +143,7 @@ export default function Settings() {
     setApiFormData({ ...apiFormData, models: newModels, selectedModel: newSelectedModel })
   }
 
-  const updateModel = (index: number, field: keyof ModelConfig, value: any) => {
+  const updateModel = (index: number, field: keyof ModelConfig, value: string | number | boolean | object | null | undefined) => {
     const newModels = [...apiFormData.models]
     newModels[index] = { ...newModels[index], [field]: value }
     setApiFormData({ ...apiFormData, models: newModels })
@@ -151,8 +151,8 @@ export default function Settings() {
 
   const handleDbSave = async () => {
     if (editingDbId) {
-      setDatabases(databases.map(db => 
-        db.id === editingDbId 
+      setDatabases(databases.map(db =>
+        db.id === editingDbId
           ? { ...db, ...dbFormData, type: 'mongodb' }
           : db
       ))
@@ -167,7 +167,7 @@ export default function Settings() {
       }
       setDatabases([...databases, newDb])
     }
-    
+
     setShowDbForm(false)
     resetDbForm()
   }
@@ -206,8 +206,8 @@ export default function Settings() {
   }
 
   const saveSettings = () => {
-    storage.saveSettings({ 
-      apis, 
+    storage.saveSettings({
+      apis,
       selectedApiId,
       databases,
       selectedDatabaseId,
@@ -239,7 +239,7 @@ export default function Settings() {
         prompts: settings.prompts,
       }
     }
-    
+
     const blob = new Blob([JSON.stringify(settingsBackup, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -258,7 +258,7 @@ export default function Settings() {
     try {
       const text = await file.text()
       const backup = JSON.parse(text)
-      
+
       if (backup.type !== 'settings') {
         alert('这不是系统设置备份文件')
         return
@@ -272,9 +272,9 @@ export default function Settings() {
         settings.selectedDatabaseId = backup.data.selectedDatabaseId || null
         settings.storageType = backup.data.storageType || 'localStorage'
         settings.prompts = backup.data.prompts || undefined
-        
+
         storage.saveSettings(settings)
-        
+
         // 刷新页面状态
         setApis(settings.apis)
         setSelectedApiId(settings.selectedApiId)
@@ -282,13 +282,14 @@ export default function Settings() {
         setSelectedDatabaseId(settings.selectedDatabaseId)
         setStorageType(settings.storageType)
         setEditedPrompts(settings.prompts || promptManager.getPrompts())
-        
+
         alert('系统设置导入成功')
       }
     } catch (error) {
+      console.error(error)
       alert('导入失败：文件格式错误')
     }
-    
+
     // 清空文件选择
     event.target.value = ''
   }
@@ -315,7 +316,7 @@ export default function Settings() {
       <div className="p-4 border-b border-slate-700 bg-slate-800">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">⚙️ 设置</h1>
-          <button 
+          <button
             className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
             onClick={() => navigate(-1)}
           >
@@ -372,7 +373,7 @@ export default function Settings() {
           {activeTab === 'api' && (
             <>
               <div className="flex justify-end mb-4">
-                <button 
+                <button
                   className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                   onClick={() => { setShowApiForm(true); setEditingApiId(null); resetApiForm() }}
                 >
@@ -414,7 +415,7 @@ export default function Settings() {
                         placeholder="sk-..."
                       />
                     </div>
-                    
+
                     <div>
                       <label className="block text-sm font-medium text-slate-300 mb-2">模型配置</label>
                       <div className="space-y-2">
@@ -427,14 +428,14 @@ export default function Settings() {
                             placeholder="模型名称，如 gpt-4"
                             onKeyPress={(e) => e.key === 'Enter' && addModel()}
                           />
-                          <button 
+                          <button
                             className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
                             onClick={addModel}
                           >
                             添加
                           </button>
                         </div>
-                        
+
                         {apiFormData.models.length > 0 && (
                           <div className="space-y-2 mt-4">
                             <div className="flex items-center gap-2 mb-2">
@@ -449,12 +450,12 @@ export default function Settings() {
                                 ))}
                               </select>
                             </div>
-                            
+
                             {apiFormData.models.map((model, index) => (
                               <div key={index} className="bg-slate-900 rounded-lg p-3 border border-slate-700">
                                 <div className="flex justify-between items-start mb-2">
                                   <span className="font-medium">{model.name}</span>
-                                  <button 
+                                  <button
                                     className="text-red-400 hover:text-red-300 text-sm"
                                     onClick={() => removeModel(index)}
                                   >
@@ -499,7 +500,7 @@ export default function Settings() {
 
                     <div className="flex gap-2">
                       <button className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" onClick={handleApiSave}>保存</button>
-                      <button 
+                      <button
                         className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
                         onClick={() => { setShowApiForm(false); setEditingApiId(null); resetApiForm() }}
                       >
@@ -521,8 +522,8 @@ export default function Settings() {
                     </div>
                   ) : (
                     apis.map((api) => (
-                      <div 
-                        key={api.id} 
+                      <div
+                        key={api.id}
                         className={`p-4 flex justify-between items-center cursor-pointer transition-colors ${
                           selectedApiId === api.id ? 'bg-green-900/30' : 'hover:bg-slate-700/50'
                         }`}
@@ -543,13 +544,13 @@ export default function Settings() {
                           </div>
                         </div>
                         <div className="flex gap-2">
-                          <button 
+                          <button
                             className="px-3 py-1.5 border border-cyan-500 text-cyan-400 hover:bg-cyan-500/10 rounded-lg text-sm font-medium transition-colors"
                             onClick={(e) => { e.stopPropagation(); handleApiEdit(api) }}
                           >
                             编辑
                           </button>
-                          <button 
+                          <button
                             className="px-3 py-1.5 border border-red-500 text-red-400 hover:bg-red-500/10 rounded-lg text-sm font-medium transition-colors"
                             onClick={(e) => { e.stopPropagation(); handleApiDelete(api.id) }}
                           >
@@ -610,7 +611,7 @@ export default function Settings() {
               {storageType === 'mongodb' && (
                 <>
                   <div className="flex justify-end mb-4">
-                    <button 
+                    <button
                       className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                       onClick={() => { setShowDbForm(true); setEditingDbId(null); resetDbForm() }}
                     >
@@ -644,7 +645,7 @@ export default function Settings() {
                         </div>
                         <div className="flex gap-2">
                           <button className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" onClick={handleDbSave}>保存</button>
-                          <button 
+                          <button
                             className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
                             onClick={() => { setShowDbForm(false); setEditingDbId(null); resetDbForm() }}
                           >
@@ -676,20 +677,20 @@ export default function Settings() {
                                 </div>
                               </div>
                               <div className="flex gap-2">
-                                <button 
+                                <button
                                   className="px-3 py-1.5 border border-blue-500 text-blue-400 hover:bg-blue-500/10 rounded-lg text-sm font-medium transition-colors"
                                   onClick={() => handleTestConnection(db)}
                                   disabled={testingDb === db.id}
                                 >
                                   {testingDb === db.id ? '测试中...' : '🔗 测试连接'}
                                 </button>
-                                <button 
+                                <button
                                   className="px-3 py-1.5 border border-cyan-500 text-cyan-400 hover:bg-cyan-500/10 rounded-lg text-sm font-medium transition-colors"
                                   onClick={() => handleDbEdit(db)}
                                 >
                                   编辑
                                 </button>
-                                <button 
+                                <button
                                   className="px-3 py-1.5 border border-red-500 text-red-400 hover:bg-red-500/10 rounded-lg text-sm font-medium transition-colors"
                                   onClick={() => handleDbDelete(db.id)}
                                 >
@@ -715,8 +716,8 @@ export default function Settings() {
                   <div className="text-4xl mb-4">{storageType === 'localStorage' ? '📱' : '🗃️'}</div>
                   <h3 className="text-xl font-semibold mb-2">使用 {storageType === 'localStorage' ? 'LocalStorage' : 'IndexedDB'}</h3>
                   <p className="text-slate-400">
-                    {storageType === 'localStorage' 
-                      ? '数据将存储在浏览器本地，容量约 5-10MB' 
+                    {storageType === 'localStorage'
+                      ? '数据将存储在浏览器本地，容量约 5-10MB'
                       : '数据将存储在浏览器 IndexedDB，容量更大更稳定'}
                   </p>
                 </div>
@@ -729,7 +730,7 @@ export default function Settings() {
               <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-lg font-semibold mb-4">📤 导出小说数据备份</h3>
                 <p className="text-slate-400 mb-4">将所有小说、人物和章节数据导出为 JSON 文件</p>
-                <button 
+                <button
                   className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                   onClick={handleExport}
                 >
@@ -759,7 +760,7 @@ export default function Settings() {
               <div className="bg-slate-800 rounded-2xl border border-slate-700 p-6">
                 <h3 className="text-lg font-semibold mb-4">⚙️ 导出系统设置备份</h3>
                 <p className="text-slate-400 mb-4">导出 API 配置、数据库配置和 Prompt 设置</p>
-                <button 
+                <button
                   className="px-6 py-3 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors"
                   onClick={handleExportSettings}
                 >
@@ -858,7 +859,7 @@ export default function Settings() {
               </div>
 
               <div className="flex gap-2">
-                <button 
+                <button
                   className="px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
                   onClick={() => {
                     const settings = storage.getSettings()
@@ -869,7 +870,7 @@ export default function Settings() {
                 >
                   💾 保存配置
                 </button>
-                <button 
+                <button
                   className="px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
                   onClick={() => {
                     if (confirm('确定要恢复默认 Prompt 配置吗？')) {

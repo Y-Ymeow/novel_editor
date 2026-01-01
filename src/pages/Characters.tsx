@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { Character } from '../types'
+import type { Character, Novel } from '../types'
 import { storage } from '../utils/storage'
 import { getCharacters, deleteCharacter, updateCharacter, createCharacter } from '../utils/storageWrapper'
 import { getNovels } from '../utils/storageWrapper'
@@ -22,11 +22,11 @@ export default function Characters() {
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null)
   const [currentNovelId, setCurrentNovelId] = useState<string | null>(null)
-  const [currentNovel, setCurrentNovel] = useState<any>(null)
+  const [currentNovel, setCurrentNovel] = useState<Novel|null>(null)
   const [batchInput, setBatchInput] = useState('')
   const [batchCreatedCharacters, setBatchCreatedCharacters] = useState<Character[]>([])
   const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null)
-  
+
   const [formData, setFormData] = useState({
     name: '',
     gender: '',
@@ -171,14 +171,14 @@ export default function Characters() {
   const handleFieldChange = (field: keyof typeof formData, value: string) => {
     const currentHistory = fieldHistory[field] || []
     const newValue = value.trim()
-    
+
     if (newValue && newValue !== currentHistory[currentHistory.length - 1]) {
       setFieldHistory(prev => ({
         ...prev,
         [field]: [...prev[field], newValue]
       }))
     }
-    
+
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
@@ -210,15 +210,15 @@ export default function Characters() {
     try {
       // 尝试提取和修复 JSON
       let jsonStr = generated
-      
+
       // 1. 尝试提取 JSON 对象
       const firstBrace = generated.indexOf('{')
       const lastBrace = generated.lastIndexOf('}')
-      
+
       if (firstBrace !== -1 && lastBrace !== -1) {
         jsonStr = generated.substring(firstBrace, lastBrace + 1)
       }
-      
+
       // 2. 尝试修复常见的 JSON 格式问题
       // 移除注释
       jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
@@ -228,9 +228,9 @@ export default function Characters() {
       jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
       // 修复单引号为双引号
       jsonStr = jsonStr.replace(/'/g, '"')
-      
+
       // 3. 尝试解析
-      let parsed: any
+      let parsed;
       try {
         parsed = JSON.parse(jsonStr)
       } catch (parseError) {
@@ -239,20 +239,21 @@ export default function Characters() {
           // 移除可能导致安全问题的内容
           jsonStr = jsonStr.replace(/new\s+\w+/g, '')
           jsonStr = jsonStr.replace(/function\s*\(/g, '')
-          parsed = eval(`(${jsonStr})`)
+          parsed = Function.apply(`(${jsonStr})`)
         } catch (evalError) {
+          console.error(evalError)
           throw new Error(`JSON 解析失败: ${parseError instanceof Error ? parseError.message : '未知错误'}`)
         }
       }
-      
+
       // 辅助函数：将任意值转换为字符串
-      const toString = (value: any): string => {
+      const toString = (value: string | object | number | undefined | null): string => {
         if (value === null || value === undefined) return ''
         if (typeof value === 'string') return value
         if (typeof value === 'object') return JSON.stringify(value)
         return String(value)
       }
-      
+
       // 构建新的表单数据
       const newFormData = {
         name: toString(parsed.name) || formData.name,
@@ -278,7 +279,7 @@ export default function Characters() {
       // 更新表单数据
       setFormData(newFormData)
       setFieldHistory(newFieldHistory)
-      
+
       // 确保在AI生成后仍然保持编辑状态
       if (editingId) {
         setEditingId(editingId)
@@ -288,7 +289,7 @@ export default function Characters() {
     } catch (error) {
       console.error('解析 AI 返回内容失败:', error)
       console.error('原始内容:', generated)
-      
+
       // 尝试从文本中提取关键信息作为后备方案
       const fallbackData = extractInfoFromText(generated)
       if (Object.keys(fallbackData).length > 0) {
@@ -301,7 +302,7 @@ export default function Characters() {
           notes: fallbackData.notes || formData.notes,
           summary: fallbackData.summary || formData.summary,
         }
-        
+
         setFormData(newFormData)
         alert('AI 返回的格式有问题，但已尝试提取部分信息。请检查并补充完整。')
       } else {
@@ -313,9 +314,21 @@ export default function Characters() {
   // 从非 JSON 文本中提取信息的后备函数
   const extractInfoFromText = (text: string): Partial<Character> => {
     const result: Partial<Character> = {}
-    
+
+    const PARSABLE_FIELDS = [
+      "name",
+      "gender",
+      "personality",
+      "background",
+      "relationships",
+      "notes",
+      "summary",
+    ] as const
+
+    type ParsableCharacterFields = typeof PARSABLE_FIELDS[number];
+
     // 尝试匹配各种格式的字段
-    const patterns: {[K in keyof Character]?: RegExp} = {
+    const patterns: Record<ParsableCharacterFields, RegExp> = {
       name: /(?:姓名|name)[:：]\s*([^\n,，]+)/i,
       gender: /(?:性别|gender)[:：]\s*([^\n,，]+)/i,
       personality: /(?:性格|personality)[:：]\s*([^\n]+)/i,
@@ -324,14 +337,14 @@ export default function Characters() {
       notes: /(?:备注|notes?)[:：]\s*([^\n]+)/i,
       summary: /(?:摘要|summary)[:：]\s*([^\n]+)/i,
     }
-    
-    for (const [key, pattern] of Object.entries(patterns)) {
-      const match = text.match(pattern)
+
+    for (const key of PARSABLE_FIELDS) {
+      const match = text.match(patterns[key])
       if (match && match[1]) {
         result[key] = match[1].trim()
       }
     }
-    
+
     return result
   }
 
@@ -361,7 +374,7 @@ export default function Characters() {
           try {
             // 尝试解析为 JSON 对象
             const charData = JSON.parse(line)
-            
+
             const newCharacter: Character = {
               id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
               novelId: currentNovelId,
@@ -378,23 +391,24 @@ export default function Characters() {
             await createCharacter(newCharacter)
             continue
           } catch (e) {
+            console.error(e)
             // JSON 解析失败，继续尝试其他格式
           }
         }
-        
+
         // 如果不是 JSON，尝试解析简单格式：姓名：类型 - 描述
         let name = ''
         let type = ''
         let description = ''
-        
+
         if (line.includes('：') || line.includes(':')) {
           const parts = line.split(/[:：]/)
           if (parts.length >= 1) {
             name = parts[0].trim()
-            
+
             if (parts.length >= 2) {
               const remaining = parts.slice(1).join('').trim()
-              
+
               if (remaining.includes(' - ') || remaining.includes('—')) {
                 const typeDescParts = remaining.split(/\s*[-—]\s*/)
                 type = typeDescParts[0].trim()
@@ -407,16 +421,16 @@ export default function Characters() {
         } else {
           type = line.trim()
         }
-        
+
         if (!name && type) {
           name = type
         }
-        
+
         let notes = type
         if (description) {
           notes += ` - ${description}`
         }
-        
+
         const newCharacter: Character = {
           id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
           novelId: currentNovelId,
@@ -447,15 +461,15 @@ export default function Characters() {
     try {
       // 尝试提取和修复 JSON 数组
       let jsonStr = generated
-      
+
       // 1. 尝试提取 JSON 数组
       const firstBracket = generated.indexOf('[')
       const lastBracket = generated.lastIndexOf(']')
-      
+
       if (firstBracket !== -1 && lastBracket !== -1) {
         jsonStr = generated.substring(firstBracket, lastBracket + 1)
       }
-      
+
       // 2. 尝试修复常见的 JSON 格式问题
       // 移除注释
       jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
@@ -465,9 +479,9 @@ export default function Characters() {
       jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
       // 修复单引号为双引号
       jsonStr = jsonStr.replace(/'/g, '"')
-      
+
       // 3. 尝试解析
-      let parsed: any
+      let parsed;
       try {
         parsed = JSON.parse(jsonStr)
       } catch (parseError) {
@@ -475,21 +489,22 @@ export default function Characters() {
         try {
           jsonStr = jsonStr.replace(/new\s+\w+/g, '')
           jsonStr = jsonStr.replace(/function\s*\(/g, '')
-          parsed = eval(`(${jsonStr})`)
+          parsed = Function.apply(`(${jsonStr})`)
         } catch (evalError) {
+          console.error(evalError)
           throw new Error(`JSON 解析失败: ${parseError instanceof Error ? parseError.message : '未知错误'}`)
         }
       }
-      
+
       if (Array.isArray(parsed)) {
         // 将完整的 JSON 对象格式化为 JSON 字符串，每行一个对象
-        const entries = parsed.map((item: any) => {
+        const entries = parsed.map((item: string | Character | undefined) => {
           if (typeof item === 'object' && item.name) {
             return JSON.stringify(item)
           }
           return ''
         }).filter(Boolean)
-        
+
         if (entries.length > 0) {
           setBatchInput(entries.join('\n'))
           alert(`已生成 ${entries.length} 个完整的人物信息，请确认后创建！`)
@@ -510,7 +525,7 @@ export default function Characters() {
     } catch (error) {
       console.error('解析 AI 返回内容失败:', error)
       console.error('原始内容:', generated)
-      
+
       // 尝试从文本中提取姓名作为后备方案
       const names = extractNamesFromText(generated)
       if (names.length > 0) {
@@ -525,7 +540,7 @@ export default function Characters() {
   // 从非 JSON 文本中提取姓名的后备函数
   const extractNamesFromText = (text: string): string[] => {
     const names: string[] = []
-    
+
     // 尝试匹配各种格式的姓名列表
     // 1. 匹配 "姓名: xxx" 格式
     const namePattern1 = /(?:姓名|name)[:：]\s*([^\n,，]+)/gi
@@ -536,7 +551,7 @@ export default function Characters() {
         names.push(name)
       }
     }
-    
+
     // 2. 匹配列表格式（- xxx 或 1. xxx）
     const listPattern = /^[\s]*[-•\d.]+\s*([^\n,，]{2,10})$/gm
     while ((match = listPattern.exec(text)) !== null) {
@@ -545,7 +560,7 @@ export default function Characters() {
         names.push(name)
       }
     }
-    
+
     // 3. 如果还是没有找到，尝试提取可能的中文姓名（2-4个汉字）
     if (names.length === 0) {
       const chineseNamePattern = /[\u4e00-\u9fa5]{2,4}/g
@@ -556,26 +571,26 @@ export default function Characters() {
         }
       }
     }
-    
+
     return names
   }
 
   // 为单个角色生成详细信息
   const handleGenerateCharacterDetail = async (character: Character) => {
     setGeneratingCharacterId(character.id)
-    
+
     try {
       // 构建其他角色的上下文信息
       const otherCharacters = characters.filter(c => c.id !== character.id)
-      let characterContext = ''
-      
-      if (otherCharacters.length > 0) {
-        characterContext = '\n\n【已存在的其他人物】\n'
-        otherCharacters.forEach((char, index) => {
-          characterContext += `${index + 1}. ${char.name}：${char.summary || char.personality || char.background || '暂无描述'}\n`
-        })
-      }
-      
+      // let characterContext = ''
+
+      // if (otherCharacters.length > 0) {
+      //   characterContext = '\n\n【已存在的其他人物】\n'
+      //   otherCharacters.forEach((char, index) => {
+      //     characterContext += `${index + 1}. ${char.name}：${char.summary || char.personality || char.background || '暂无描述'}\n`
+      //   })
+      // }
+
       // 临时保存当前正在编辑的角色信息到 formData
       setFormData({
         name: character.name,
@@ -586,26 +601,26 @@ export default function Characters() {
         notes: character.notes || '',
         summary: character.summary || '',
       })
-      
+
       setEditingId(character.id)
       setShowModal(true)
       setShowBatchResultModal(false)
-      
+
       // 延迟一下，确保 Modal 已经打开
       setTimeout(() => {
         // 显示提示，包含角色类型和其他角色信息
         let message = `正在为"${character.name}"生成详细信息。`
-        
+
         if (character.notes) {
           message += `\n\n角色类型：${character.notes}`
         }
-        
+
         if (otherCharacters.length > 0) {
           message += `\n\n已存在 ${otherCharacters.length} 个角色，AI 会参考这些角色来生成合理的关系和背景。`
         }
-        
+
         message += `\n\n请点击 Modal 中的"🚀 生成人物卡片"按钮开始生成。`
-        
+
         alert(message)
       }, 100)
     } catch (error) {
@@ -621,7 +636,7 @@ export default function Characters() {
       <div className="p-4 border-b border-slate-700 bg-slate-800">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">👤 人物卡片</h1>
-          <button 
+          <button
             className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
             onClick={() => navigate('/editor')}
           >
@@ -642,13 +657,13 @@ export default function Characters() {
         {currentNovelId && (
           <div className="max-w-4xl mx-auto space-y-6">
             <div className="flex gap-2">
-              <button 
+              <button
                 className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
                 onClick={() => { setShowModal(true); setEditingId(null); resetForm() }}
               >
                 + 新建人物
               </button>
-              <button 
+              <button
                 className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors"
                 onClick={() => { setShowBatchModal(true); setBatchInput('') }}
               >
@@ -664,7 +679,7 @@ export default function Characters() {
                 </div>
               ) : (
                 characters.map((char) => (
-                  <div 
+                  <div
                     key={char.id}
                     className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden hover:border-slate-600 transition-all hover:scale-105 cursor-pointer"
                     onClick={() => setSelectedCharacter(selectedCharacter?.id === char.id ? null : char)}
@@ -680,7 +695,7 @@ export default function Characters() {
                           </div>
                         </div>
                       </div>
-                      
+
                       {selectedCharacter?.id === char.id ? (
                         <div className="space-y-2 text-sm">
                           {char.summary && (  // 显示摘要
@@ -721,13 +736,13 @@ export default function Characters() {
                       )}
                     </div>
                     <div className="px-5 py-3 bg-slate-900/50 border-t border-slate-700 flex gap-2">
-                      <button 
+                      <button
                         className="flex-1 px-3 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-xl text-sm font-medium transition-colors"
                         onClick={(e) => { e.stopPropagation(); handleEdit(char) }}
                       >
                         编辑
                       </button>
-                      <button 
+                      <button
                         className="flex-1 px-3 py-2 bg-red-900/50 hover:bg-red-900/80 text-red-400 rounded-xl text-sm font-medium transition-colors"
                         onClick={(e) => { e.stopPropagation(); handleDelete(char.id) }}
                       >
@@ -749,13 +764,13 @@ export default function Characters() {
         maxWidth="2xl"
         footer={
           <div className="flex gap-2">
-            <button 
-              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" 
+            <button
+              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
               onClick={handleSave}
             >
               保存
             </button>
-            <button 
+            <button
               className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
               onClick={() => { setShowModal(false); setEditingId(null); resetForm() }}
             >
@@ -943,7 +958,7 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
                 buttonText="🚀 生成摘要"
                 currentNovelId={currentNovelId}
                 systemPrompt={`你是一个专业的小说人物摘要助手。请根据人物信息生成简洁准确的人物摘要。
-                
+
 当前人物信息：
 - 姓名：${formData.name}
 - 性别：${formData.gender}
@@ -966,13 +981,13 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
         maxWidth="2xl"
         footer={
           <div className="flex gap-2">
-            <button 
-              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors" 
+            <button
+              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
               onClick={handleBatchCreate}
             >
               创建
             </button>
-            <button 
+            <button
               className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
               onClick={() => { setShowBatchModal(false); setBatchInput('') }}
             >
@@ -1057,13 +1072,13 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
         maxWidth="2xl"
         footer={
           <div className="flex gap-2">
-            <button 
-              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors" 
+            <button
+              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
               onClick={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]) }}
             >
               完成
             </button>
-            <button 
+            <button
               className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
               onClick={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]); setShowBatchModal(true); setBatchInput('') }}
             >
@@ -1083,12 +1098,12 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
               </p>
             )}
           </div>
-          
+
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {batchCreatedCharacters.map((char) => {
               const hasCompleteInfo = char.personality && char.background && char.relationships
               return (
-                <div 
+                <div
                   key={char.id}
                   className="flex items-center justify-between bg-slate-700/50 rounded-xl p-4 border border-slate-600"
                 >
@@ -1108,7 +1123,7 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
                   </div>
                   <div className="flex gap-2 shrink-0">
                     {!hasCompleteInfo && (
-                      <button 
+                      <button
                         className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                         onClick={() => handleGenerateCharacterDetail(char)}
                         disabled={generatingCharacterId === char.id}
@@ -1116,7 +1131,7 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
                         {generatingCharacterId === char.id ? '生成中...' : '🤖 生成详情'}
                       </button>
                     )}
-                    <button 
+                    <button
                       className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
                       onClick={() => { handleEdit(char); setShowBatchResultModal(false) }}
                     >

@@ -17,6 +17,7 @@ import EditChapterDescriptionModal from "../components/EditChapterDescriptionMod
 import CreateChapterModal from "../components/CreateChapterModal";
 import AiInput from "../components/AiInput";
 import FullscreenTextarea from "../components/FullscreenTextarea";
+import type { ChapterFormData } from "../components/CreateChapterModal";
 
 export default function Editor() {
   const navigate = useNavigate();
@@ -27,7 +28,10 @@ export default function Editor() {
   const [currentNovel, setCurrentNovel] = useState<Novel | null>(null);
   const [content, setContent] = useState("");
   const [showChapterForm, setShowChapterForm] = useState(false);
-  const [currentNovelId, setCurrentNovelId] = useState<string | null>(null);
+  const [currentNovelId] = useState<string | null>(() => {
+    const settings = storage.getSettings();
+    return settings.selectedNovelId ?? null;
+  });
   const [streamingContent, setStreamingContent] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const [showEditDescription, setShowEditDescription] = useState(false);
@@ -47,22 +51,6 @@ export default function Editor() {
         editorTextareaRef.current.scrollHeight;
     }
   }, [streamingContent, isStreaming]);
-
-  useEffect(() => {
-    const settings = storage.getSettings();
-    setCurrentNovelId(settings.selectedNovelId);
-
-    if (settings.selectedNovelId) {
-      loadChapters(settings.selectedNovelId);
-      loadCharacters(settings.selectedNovelId);
-      loadNovel(settings.selectedNovelId);
-
-      const chapterId = searchParams.get("chapter");
-      if (chapterId) {
-        loadChapter(chapterId, settings.selectedNovelId);
-      }
-    }
-  }, [searchParams]);
 
   const loadChapters = async (novelId: string) => {
     const loaded = await getChapters(novelId);
@@ -90,6 +78,19 @@ export default function Editor() {
       setContent(chapter.content);
     }
   };
+
+  const settings = storage.getSettings();
+
+  if (settings.selectedNovelId) {
+    loadChapters(settings.selectedNovelId);
+    loadCharacters(settings.selectedNovelId);
+    loadNovel(settings.selectedNovelId);
+
+    const chapterId = searchParams.get("chapter");
+    if (chapterId) {
+      loadChapter(chapterId, settings.selectedNovelId);
+    }
+  }
 
   const handleSave = async () => {
     if (!currentChapter) {
@@ -596,7 +597,7 @@ export default function Editor() {
           });
         }}
         chapterFormData={chapterFormData}
-        setChapterFormData={setChapterFormData}
+        setChapterFormData={(data: ChapterFormData) => setChapterFormData(data)}
         onCreate={handleCreateChapter}
         buildDescriptionPrompt={buildDescriptionPrompt}
         currentNovelId={currentNovelId}

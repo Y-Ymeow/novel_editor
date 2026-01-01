@@ -2,13 +2,13 @@ import Modal from "./Modal";
 import AiInput from "./AiInput";
 import FullscreenTextarea from "../components/FullscreenTextarea";
 
-interface ChapterFormData {
+export interface ChapterFormData {
   title: string;
   description: string;
   status: "draft" | "in-progress" | "completed";
 }
 
-interface CreateChapterModalProps {
+export interface CreateChapterModalProps {
   isOpen: boolean;
   onClose: () => void;
   chapterFormData: ChapterFormData;
@@ -27,6 +27,13 @@ export default function CreateChapterModal({
   buildDescriptionPrompt,
   currentNovelId,
 }: CreateChapterModalProps) {
+  const normalizeStatus = (
+    value: string,
+  ): "draft" | "completed" | "in-progress" => {
+    if (value.includes("完成")) return "completed";
+    if (value.includes("进行")) return "in-progress";
+    return "draft";
+  };
   return (
     <Modal
       isOpen={isOpen}
@@ -112,7 +119,7 @@ export default function CreateChapterModal({
             onChange={(e) =>
               setChapterFormData({
                 ...chapterFormData,
-                status: e.target.value as any,
+                status: normalizeStatus(e.target.value),
               })
             }
           >

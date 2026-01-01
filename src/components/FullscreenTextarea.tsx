@@ -32,7 +32,7 @@ const FullscreenTextarea = forwardRef<
     <>
       <div className={`relative flex flex-col ${className}`}>
         <textarea
-          ref={textareaRef as any}
+          ref={textareaRef}
           className="w-full flex-1 px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
           value={value}
           onChange={(e) => onChange(e.target.value)}

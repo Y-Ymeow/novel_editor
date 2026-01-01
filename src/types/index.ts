@@ -33,7 +33,7 @@ export interface Novel {
 
 export interface Character {
   id: string
-  novelId: string
+  novelId: string | number
   name: string
   gender: string
   personality: string
@@ -46,7 +46,7 @@ export interface Character {
 
 export interface Chapter {
   id: string
-  novelId: string
+  novelId: string | number
   title: string
   order: number
   description: string
@@ -90,7 +90,7 @@ export const DEFAULT_PROMPTS: PromptConfig = {
 6. 不要使用 Markdown 标题格式（如 ##、### 等）
 7. 内容要生动具体，有画面感，让读者能够沉浸在故事中
 8. 控制内容长度，根据用户的要求生成适当长度的内容，不要一次性写完整个章节`,
-  
+
   generateDescription: `你是一个专业的长篇小说创作助手。你正在协助作者创作一部长篇小说，现在需要为某个章节生成描述。
 
 【小说信息】

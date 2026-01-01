@@ -1,134 +1,170 @@
-import { useState, useEffect } from 'react'
-import type { Chapter } from '../types'
-import { storage } from '../utils/storage'
-import { getChapters, saveChapters } from '../utils/storageWrapper'
-import { useNavigate } from 'react-router-dom'
+import { useState } from "react";
+import type { Chapter } from "../types";
+import { storage } from "../utils/storage";
+import { getChapters, saveChapters } from "../utils/storageWrapper";
+import { useNavigate } from "react-router-dom";
 
 export default function Chapters() {
-  const navigate = useNavigate()
-  const [chapters, setChapters] = useState<Chapter[]>([])
-  const [showForm, setShowForm] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [currentNovelId, setCurrentNovelId] = useState<string | null>(null)
+  const navigate = useNavigate();
+  const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [currentNovelId, setCurrentNovelId] = useState<string | number | null>(
+    null,
+  );
 
   const [formData, setFormData] = useState({
-    title: '',
-    description: '',
-    status: 'draft' as 'draft' | 'in-progress' | 'completed',
-  })
+    title: "",
+    description: "",
+    status: "draft" as "draft" | "in-progress" | "completed",
+  });
 
   const loadChapters = async (novelId: string) => {
-    const loaded = await getChapters(novelId)
-    setChapters(loaded)
+    const loaded = await getChapters(novelId);
+    setChapters(loaded);
+  };
+
+  // useEffect(() => {
+  const settings = storage.getSettings();
+
+  if (settings.selectedNovelId) {
+    setCurrentNovelId(settings.selectedNovelId);
+    loadChapters(settings.selectedNovelId);
   }
-
-  useEffect(() => {
-    const settings = storage.getSettings()
-    setCurrentNovelId(settings.selectedNovelId)
-
-    if (settings.selectedNovelId) {
-      loadChapters(settings.selectedNovelId)
-    }
-  }, [])
+  // }, [])
 
   const handleSave = async () => {
     if (!formData.title.trim()) {
-      alert('请输入章节标题')
-      return
+      alert("请输入章节标题");
+      return;
     }
 
     if (!currentNovelId) {
-      alert('请先选择小说')
-      return
+      alert("请先选择小说");
+      return;
     }
 
-    const maxOrder = Math.max(0, ...chapters.map(c => c.order))
+    const maxOrder = Math.max(0, ...chapters.map((c) => c.order));
 
     if (editingId) {
-      const updated = chapters.map(ch =>
+      const updated = chapters.map((ch) =>
         ch.id === editingId
           ? { ...ch, ...formData, updatedAt: Date.now() }
-          : ch
-      )
-      setChapters(updated)
-      await saveChapters(updated)
-      setEditingId(null)
+          : ch,
+      );
+      setChapters(updated);
+      await saveChapters(updated);
+      setEditingId(null);
     } else {
+      const date = new Date();
+      const dateString = date.getMilliseconds().toString();
       const newChapter: Chapter = {
-        id: Date.now().toString(),
+        id: dateString,
         novelId: currentNovelId,
         title: formData.title,
         order: maxOrder + 1,
         description: formData.description,
-        content: '',
+        content: "",
         status: formData.status,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-      setChapters([...chapters, newChapter])
-      await saveChapters([...chapters, newChapter])
+        createdAt: date.getMilliseconds(),
+        updatedAt: date.getMilliseconds(),
+      };
+      setChapters([...chapters, newChapter]);
+      await saveChapters([...chapters, newChapter]);
     }
 
-    setShowForm(false)
-    resetForm()
-  }
+    setShowForm(false);
+    resetForm();
+  };
 
   const handleEdit = (ch: Chapter) => {
     setFormData({
       title: ch.title,
-      description: ch.description || '',
+      description: ch.description || "",
       status: ch.status,
-    })
-    setEditingId(ch.id)
-    setShowForm(true)
-  }
+    });
+    setEditingId(ch.id);
+    setShowForm(true);
+  };
 
   const handleDelete = async (id: string) => {
-    if (confirm('确定要删除这个章节吗？')) {
-      const updated = chapters.filter(ch => ch.id !== id)
-      setChapters(updated)
-      await saveChapters(updated)
+    if (confirm("确定要删除这个章节吗？")) {
+      const updated = chapters.filter((ch) => ch.id !== id);
+      setChapters(updated);
+      await saveChapters(updated);
     }
-  }
+  };
 
   const handleMoveUp = async (index: number) => {
-    if (index === 0) return
-    const newChapters = [...chapters]
-    ;[newChapters[index - 1], newChapters[index]] = [newChapters[index], newChapters[index - 1]]
-    newChapters.forEach((ch, i) => ch.order = i + 1)
-    setChapters(newChapters)
-    await saveChapters(newChapters)
-  }
+    if (index === 0) return;
+    const newChapters = [...chapters];
+    [newChapters[index - 1], newChapters[index]] = [
+      newChapters[index],
+      newChapters[index - 1],
+    ];
+    newChapters.forEach((ch, i) => (ch.order = i + 1));
+    setChapters(newChapters);
+    await saveChapters(newChapters);
+  };
 
   const handleMoveDown = async (index: number) => {
-    if (index === chapters.length - 1) return
-    const newChapters = [...chapters]
-    ;[newChapters[index], newChapters[index + 1]] = [newChapters[index + 1], newChapters[index]]
-    newChapters.forEach((ch, i) => ch.order = i + 1)
-    setChapters(newChapters)
-    await saveChapters(newChapters)
-  }
+    if (index === chapters.length - 1) return;
+    const newChapters = [...chapters];
+    [newChapters[index], newChapters[index + 1]] = [
+      newChapters[index + 1],
+      newChapters[index],
+    ];
+    newChapters.forEach((ch, i) => (ch.order = i + 1));
+    setChapters(newChapters);
+    await saveChapters(newChapters);
+  };
 
   const resetForm = () => {
     setFormData({
-      title: '',
-      description: '',
-      status: 'draft',
-    })
-  }
+      title: "",
+      description: "",
+      status: "draft",
+    });
+  };
 
   const openEditor = (chapterId: string) => {
-    navigate(`/?chapter=${chapterId}`)
-  }
+    navigate(`/?chapter=${chapterId}`);
+  };
 
   const getStatusBadge = (status: string) => {
     switch (status) {
-      case 'draft': return <span className="px-2 py-0.5 bg-slate-600 rounded text-xs">草稿</span>
-      case 'in-progress': return <span className="px-2 py-0.5 bg-yellow-600 text-white rounded text-xs">进行中</span>
-      case 'completed': return <span className="px-2 py-0.5 bg-green-600 rounded text-xs">已完成</span>
-      default: return <span className="px-2 py-0.5 bg-slate-600 rounded text-xs">{status}</span>
+      case "draft":
+        return (
+          <span className="px-2 py-0.5 bg-slate-600 rounded text-xs">草稿</span>
+        );
+      case "in-progress":
+        return (
+          <span className="px-2 py-0.5 bg-yellow-600 text-white rounded text-xs">
+            进行中
+          </span>
+        );
+      case "completed":
+        return (
+          <span className="px-2 py-0.5 bg-green-600 rounded text-xs">
+            已完成
+          </span>
+        );
+      default:
+        return (
+          <span className="px-2 py-0.5 bg-slate-600 rounded text-xs">
+            {status}
+          </span>
+        );
     }
-  }
+  };
+
+  const normalizeStatus = (
+    value: string,
+  ): "draft" | "completed" | "in-progress" => {
+    if (value.includes("完成")) return "completed";
+    if (value.includes("进行")) return "in-progress";
+    return "draft";
+  };
 
   return (
     <div className="chapters-page">
@@ -136,7 +172,11 @@ export default function Chapters() {
         <h2 className="text-2xl font-bold">📝 章节管理</h2>
         <button
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          onClick={() => { setShowForm(true); setEditingId(null); resetForm() }}
+          onClick={() => {
+            setShowForm(true);
+            setEditingId(null);
+            resetForm();
+          }}
           disabled={!currentNovelId}
         >
           + 新建章节
@@ -155,35 +195,52 @@ export default function Chapters() {
           {showForm && (
             <div className="bg-slate-800 rounded-xl border border-slate-700 mb-6 overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-700">
-                <h3 className="text-lg font-semibold">{editingId ? '编辑章节' : '新建章节'}</h3>
+                <h3 className="text-lg font-semibold">
+                  {editingId ? "编辑章节" : "新建章节"}
+                </h3>
               </div>
               <div className="p-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">章节标题 *</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    章节标题 *
+                  </label>
                   <input
                     type="text"
                     className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={formData.title}
-                    onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, title: e.target.value })
+                    }
                     placeholder="第1章：开始"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">章节描述</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    章节描述
+                  </label>
                   <textarea
                     className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                     rows={3}
                     value={formData.description}
-                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                    onChange={(e) =>
+                      setFormData({ ...formData, description: e.target.value })
+                    }
                     placeholder="描述本章的主要情节和发展，用于 AI 生成内容"
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-300 mb-1">状态</label>
+                  <label className="block text-sm font-medium text-slate-300 mb-1">
+                    状态
+                  </label>
                   <select
                     className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
                     value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as any })}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        status: normalizeStatus(e.target.value),
+                      })
+                    }
                   >
                     <option value="draft">草稿</option>
                     <option value="in-progress">进行中</option>
@@ -191,10 +248,19 @@ export default function Chapters() {
                   </select>
                 </div>
                 <div className="flex gap-2">
-                  <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors" onClick={handleSave}>保存</button>
+                  <button
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
+                    onClick={handleSave}
+                  >
+                    保存
+                  </button>
                   <button
                     className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
-                    onClick={() => { setShowForm(false); setEditingId(null); resetForm() }}
+                    onClick={() => {
+                      setShowForm(false);
+                      setEditingId(null);
+                      resetForm();
+                    }}
                   >
                     取消
                   </button>
@@ -214,17 +280,29 @@ export default function Chapters() {
                 <table className="w-full">
                   <thead className="bg-slate-900/50">
                     <tr>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-16">序号</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">标题</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-24">状态</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-36">最后更新</th>
-                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-44">操作</th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-16">
+                        序号
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                        标题
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-24">
+                        状态
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-36">
+                        最后更新
+                      </th>
+                      <th className="px-6 py-3 text-left text-xs font-medium text-slate-400 uppercase tracking-wider w-44">
+                        操作
+                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-700">
                     {chapters.map((ch, index) => (
                       <tr key={ch.id} className="hover:bg-slate-700/30">
-                        <td className="px-6 py-4 text-slate-500">#{ch.order}</td>
+                        <td className="px-6 py-4 text-slate-500">
+                          #{ch.order}
+                        </td>
                         <td className="px-6 py-4">
                           <div>
                             <span
@@ -302,5 +380,5 @@ export default function Chapters() {
         </>
       )}
     </div>
-  )
+  );
 }

@@ -1,9 +1,10 @@
 import { storage } from './storage'
 
 export async function callOpenAI(
-  prompt: string, 
-  systemPrompt?: string, 
+  prompt: string,
+  systemPrompt?: string,
   model?: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   apiConfig?: any
 ): Promise<string> {
   const settings = storage.getSettings()
@@ -46,6 +47,7 @@ export async function callOpenAIStream(
   prompt: string,
   systemPrompt?: string,
   model?: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   apiConfig?: any,
   thinkingTokens: number = 0,
   onChunk?: (chunk: string, fullText: string) => void,
@@ -64,6 +66,7 @@ export async function callOpenAIStream(
   }
   messages.push({ role: 'user', content: prompt })
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const requestBody: any = {
     model: model || selectedApi.selectedModel,
     messages,
@@ -119,10 +122,10 @@ export async function callOpenAIStream(
           // 检查是否有推理内容
           const reasoningContent = parsed.choices[0]?.delta?.reasoning_content || ''
           const content = parsed.choices[0]?.delta?.content || ''
-          
+
           // 如果有推理内容，使用推理内容；否则使用正常内容
           const actualContent = reasoningContent || content
-          
+
           if (actualContent) {
             fullContent += actualContent
             dataContent += content
@@ -139,9 +142,7 @@ export async function callOpenAIStream(
             }
           }
         } catch (e) {
-          // JSON解析失败，这可能是因为数据不是有效的JSON
-          // 但我们已经在前面调用了onRawData，所以这里不需要额外处理
-          // 保持原有逻辑，只处理有效的JSON数据到fullContent
+          console.error(e)
         }
       }
     }
