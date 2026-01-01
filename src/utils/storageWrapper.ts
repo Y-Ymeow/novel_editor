@@ -22,19 +22,17 @@ export async function saveNovels(novels: Novel[]): Promise<void> {
 
 export async function deleteNovel(id: string): Promise<void> {
   const settings = storage.getSettings()
-  
+
   if (settings.storageType === 'indexedDB') {
     // 删除小说
-    const novels = await getNovels()
-    const updatedNovels = novels.filter(novel => novel.id !== id)
-    await indexedDBStorage.saveNovels(updatedNovels)
-    
+    await indexedDBStorage.deleteNovel(id)
+
     // 删除相关的人物
     const characters = await getCharacters(id)
     for (const character of characters) {
       await indexedDBStorage.deleteCharacter(character.id)
     }
-    
+
     // 删除相关的章节
     const chapters = await getChapters(id)
     for (const chapter of chapters) {
@@ -45,12 +43,12 @@ export async function deleteNovel(id: string): Promise<void> {
     const novels = await getNovels()
     const updatedNovels = novels.filter(novel => novel.id !== id)
     window.localStorage.setItem('ai_novel_novels', JSON.stringify(updatedNovels))
-    
+
     // 删除相关的人物
     const allCharacters = await getCharacters()
     const updatedCharacters = allCharacters.filter(char => char.novelId !== id)
     window.localStorage.setItem('ai_novel_characters', JSON.stringify(updatedCharacters))
-    
+
     // 删除相关的章节
     const allChapters = await getChapters()
     const updatedChapters = allChapters.filter(ch => ch.novelId !== id)
@@ -61,14 +59,14 @@ export async function deleteNovel(id: string): Promise<void> {
 export async function getCharacters(novelId?: string): Promise<Character[]> {
   const settings = storage.getSettings()
   let characters: Character[]
-  
+
   if (settings.storageType === 'indexedDB') {
     characters = await indexedDBStorage.getCharacters()
   } else {
     const data = window.localStorage.getItem('ai_novel_characters')
     characters = data ? JSON.parse(data) : []
   }
-  
+
   if (novelId) {
     return characters.filter(c => c.novelId === novelId)
   }
@@ -87,14 +85,14 @@ export async function saveCharacters(characters: Character[]): Promise<void> {
 export async function getChapters(novelId?: string): Promise<Chapter[]> {
   const settings = storage.getSettings()
   let chapters: Chapter[]
-  
+
   if (settings.storageType === 'indexedDB') {
     chapters = await indexedDBStorage.getChapters()
   } else {
     const data = window.localStorage.getItem('ai_novel_chapters')
     chapters = data ? JSON.parse(data) : []
   }
-  
+
   if (novelId) {
     return chapters.filter(c => c.novelId === novelId).sort((a, b) => a.order - b.order)
   }
@@ -163,11 +161,11 @@ export async function deleteChapter(id: string): Promise<void> {
 
 export async function exportBackup(): Promise<string> {
   const settings = storage.getSettings()
-  
+
   if (settings.storageType === 'indexedDB') {
     return await indexedDBStorage.exportBackup()
   }
-  
+
   const [novels, characters, chapters] = await Promise.all([
     getNovels(),
     getCharacters(),
@@ -187,13 +185,13 @@ export async function exportBackup(): Promise<string> {
 
 export async function importBackup(jsonString: string): Promise<void> {
   const backup: BackupData = JSON.parse(jsonString)
-  
+
   if (!backup.novels || !backup.characters || !backup.chapters) {
     throw new Error('无效的备份文件')
   }
 
   const settings = storage.getSettings()
-  
+
   if (settings.storageType === 'indexedDB') {
     await indexedDBStorage.importBackup(jsonString)
   } else {

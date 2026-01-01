@@ -82,7 +82,7 @@ class IndexedDBStorage {
     if (!this.db) await this.init()
     return new Promise((resolve, reject) => {
       const transaction = this.db!.transaction([STORES.NOVELS, STORES.CHARACTERS, STORES.CHAPTERS], 'readwrite')
-      
+
       transaction.objectStore(STORES.NOVELS).clear()
       transaction.objectStore(STORES.CHARACTERS).clear()
       transaction.objectStore(STORES.CHAPTERS).clear()
@@ -99,6 +99,10 @@ class IndexedDBStorage {
 
   async saveNovels(novels: Novel[]): Promise<void> {
     return this.putAll(STORES.NOVELS, novels)
+  }
+
+  async deleteNovel(id: string): Promise<void> {
+    return this.deleteById(STORES.NOVELS, id)
   }
 
   // Characters
@@ -183,13 +187,13 @@ class IndexedDBStorage {
 
   async importBackup(jsonString: string): Promise<void> {
     const backup = JSON.parse(jsonString)
-    
+
     if (!backup.novels || !backup.characters || !backup.chapters) {
       throw new Error('无效的备份文件')
     }
 
     await this.clearAll()
-    
+
     await Promise.all([
       this.putAll(STORES.NOVELS, backup.novels),
       this.putAll(STORES.CHARACTERS, backup.characters),
