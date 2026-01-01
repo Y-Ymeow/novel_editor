@@ -250,6 +250,10 @@ export default function AiInput({
         setTimeout(() => setShowPreview(false), 1000);
       }
     } catch (error) {
+      // 发生错误时关闭预览弹窗
+      if (showPreview) {
+        setShowPreview(false);
+      }
       alert(`生成失败: ${error instanceof Error ? error.message : "未知错误"}`);
     } finally {
       setIsGenerating(false);

@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Novel } from '../types'
-import { getNovels, saveNovels } from '../utils/storageWrapper'
+import { getNovels, saveNovels, deleteNovel } from '../utils/storageWrapper'
 import { storage } from '../utils/storage'
 import Modal from '../components/Modal'
 import AiInput from '../components/AiInput'
@@ -76,9 +76,10 @@ export default function NovelSelect() {
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这本小说吗？相关的人物和章节也会被删除。')) {
+      await deleteNovel(id)
+      
       const updated = novels.filter(novel => novel.id !== id)
       setNovels(updated)
-      await saveNovels(updated)
       
       const settings = storage.getSettings()
       if (settings.selectedNovelId === id) {

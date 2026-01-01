@@ -17,26 +17,26 @@ export default function Chapters() {
     status: 'draft' as 'draft' | 'in-progress' | 'completed',
   })
 
-  useEffect(() => {
-    const settings = storage.getSettings()
-    setCurrentNovelId(settings.selectedNovelId)
-    
-    if (settings.selectedNovelId) {
-      loadChapters(settings.selectedNovelId)
-    }
-  }, [])
-
   const loadChapters = async (novelId: string) => {
     const loaded = await getChapters(novelId)
     setChapters(loaded)
   }
+
+  useEffect(() => {
+    const settings = storage.getSettings()
+    setCurrentNovelId(settings.selectedNovelId)
+
+    if (settings.selectedNovelId) {
+      loadChapters(settings.selectedNovelId)
+    }
+  }, [])
 
   const handleSave = async () => {
     if (!formData.title.trim()) {
       alert('请输入章节标题')
       return
     }
-    
+
     if (!currentNovelId) {
       alert('请先选择小说')
       return
@@ -45,8 +45,8 @@ export default function Chapters() {
     const maxOrder = Math.max(0, ...chapters.map(c => c.order))
 
     if (editingId) {
-      const updated = chapters.map(ch => 
-        ch.id === editingId 
+      const updated = chapters.map(ch =>
+        ch.id === editingId
           ? { ...ch, ...formData, updatedAt: Date.now() }
           : ch
       )
@@ -68,7 +68,7 @@ export default function Chapters() {
       setChapters([...chapters, newChapter])
       await saveChapters([...chapters, newChapter])
     }
-    
+
     setShowForm(false)
     resetForm()
   }
@@ -134,7 +134,7 @@ export default function Chapters() {
     <div className="chapters-page">
       <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">📝 章节管理</h2>
-        <button 
+        <button
           className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={() => { setShowForm(true); setEditingId(null); resetForm() }}
           disabled={!currentNovelId}
@@ -192,7 +192,7 @@ export default function Chapters() {
                 </div>
                 <div className="flex gap-2">
                   <button className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors" onClick={handleSave}>保存</button>
-                  <button 
+                  <button
                     className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
                     onClick={() => { setShowForm(false); setEditingId(null); resetForm() }}
                   >
@@ -227,7 +227,7 @@ export default function Chapters() {
                         <td className="px-6 py-4 text-slate-500">#{ch.order}</td>
                         <td className="px-6 py-4">
                           <div>
-                            <span 
+                            <span
                               className="font-semibold cursor-pointer hover:text-blue-400 transition-colors"
                               onClick={() => openEditor(ch.id)}
                             >
@@ -253,7 +253,7 @@ export default function Chapters() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex gap-1">
-                            <button 
+                            <button
                               className="p-1.5 border border-slate-600 text-slate-400 hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               onClick={() => handleMoveUp(index)}
                               disabled={index === 0}
@@ -261,7 +261,7 @@ export default function Chapters() {
                             >
                               ↑
                             </button>
-                            <button 
+                            <button
                               className="p-1.5 border border-slate-600 text-slate-400 hover:bg-slate-700 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               onClick={() => handleMoveDown(index)}
                               disabled={index === chapters.length - 1}
@@ -269,21 +269,21 @@ export default function Chapters() {
                             >
                               ↓
                             </button>
-                            <button 
+                            <button
                               className="p-1.5 border border-blue-500 text-blue-400 hover:bg-blue-500/10 rounded transition-colors"
                               onClick={() => openEditor(ch.id)}
                               title="编辑"
                             >
                               ✏️
                             </button>
-                            <button 
+                            <button
                               className="p-1.5 border border-cyan-500 text-cyan-400 hover:bg-cyan-500/10 rounded transition-colors"
                               onClick={() => handleEdit(ch)}
                               title="修改标题"
                             >
                               📝
                             </button>
-                            <button 
+                            <button
                               className="p-1.5 border border-red-500 text-red-400 hover:bg-red-500/10 rounded transition-colors"
                               onClick={() => handleDelete(ch.id)}
                               title="删除"

@@ -20,6 +20,44 @@ export async function saveNovels(novels: Novel[]): Promise<void> {
   }
 }
 
+export async function deleteNovel(id: string): Promise<void> {
+  const settings = storage.getSettings()
+  
+  if (settings.storageType === 'indexedDB') {
+    // 删除小说
+    const novels = await getNovels()
+    const updatedNovels = novels.filter(novel => novel.id !== id)
+    await indexedDBStorage.saveNovels(updatedNovels)
+    
+    // 删除相关的人物
+    const characters = await getCharacters(id)
+    for (const character of characters) {
+      await indexedDBStorage.deleteCharacter(character.id)
+    }
+    
+    // 删除相关的章节
+    const chapters = await getChapters(id)
+    for (const chapter of chapters) {
+      await indexedDBStorage.deleteChapter(chapter.id)
+    }
+  } else {
+    // LocalStorage 方式
+    const novels = await getNovels()
+    const updatedNovels = novels.filter(novel => novel.id !== id)
+    window.localStorage.setItem('ai_novel_novels', JSON.stringify(updatedNovels))
+    
+    // 删除相关的人物
+    const allCharacters = await getCharacters()
+    const updatedCharacters = allCharacters.filter(char => char.novelId !== id)
+    window.localStorage.setItem('ai_novel_characters', JSON.stringify(updatedCharacters))
+    
+    // 删除相关的章节
+    const allChapters = await getChapters()
+    const updatedChapters = allChapters.filter(ch => ch.novelId !== id)
+    window.localStorage.setItem('ai_novel_chapters', JSON.stringify(updatedChapters))
+  }
+}
+
 export async function getCharacters(novelId?: string): Promise<Character[]> {
   const settings = storage.getSettings()
   let characters: Character[]
@@ -124,7 +162,7 @@ export async function deleteChapter(id: string): Promise<void> {
 }
 
 export async function exportBackup(): Promise<string> {
-  const settings = localStorage.getSettings()
+  const settings = storage.getSettings()
   
   if (settings.storageType === 'indexedDB') {
     return await indexedDBStorage.exportBackup()

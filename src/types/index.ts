@@ -36,7 +36,6 @@ export interface Character {
   novelId: string
   name: string
   gender: string
-  avatar?: string
   personality: string
   background: string
   relationships: string
