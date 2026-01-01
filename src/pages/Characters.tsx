@@ -328,7 +328,7 @@ export default function Characters() {
     for (const [key, pattern] of Object.entries(patterns)) {
       const match = text.match(pattern)
       if (match && match[1] && key != undefined) {
-        result[key as keyof Character] = match[1].trim()
+        result[key] = match[1].trim()
       }
     }
     
