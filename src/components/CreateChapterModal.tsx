@@ -30,8 +30,8 @@ export default function CreateChapterModal({
   const normalizeStatus = (
     value: string,
   ): "draft" | "completed" | "in-progress" => {
-    if (value.includes("完成")) return "completed";
-    if (value.includes("进行")) return "in-progress";
+    if (value == "completed") return "completed";
+    if (value == "in-progress") return "in-progress";
     return "draft";
   };
   return (

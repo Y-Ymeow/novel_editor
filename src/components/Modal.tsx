@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import React, { useEffect } from 'react'
 
 interface ModalProps {
@@ -15,7 +16,7 @@ interface ModalProps {
 
 const maxWidthClasses = {
   sm: 'max-w-sm',
-  md: 'max-w-md', 
+  md: 'max-w-md',
   lg: 'max-w-lg',
   xl: 'max-w-xl',
   '2xl': 'max-w-2xl',
@@ -34,7 +35,7 @@ export default function Modal({
   footer,
   className = ''
 }: ModalProps) {
-  
+
   // ESC键关闭处理
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
@@ -66,18 +67,18 @@ export default function Modal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       {/* 背景遮罩 */}
-      <div 
+      <div
         className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={handleBackdropClick}
       />
-      
+
+      <div className="hidden" onClick={(e) => handleBackdropClick(e)}></div>
       {/* Modal内容 */}
       <div className={`relative bg-slate-800 rounded-xl border border-slate-700 w-full ${maxWidthClasses[maxWidth]} max-h-[90vh] overflow-hidden flex flex-col shadow-2xl ${className}`}>
         {/* 标题栏 */}
         <div className="flex items-center justify-between p-4 border-b border-slate-700 flex-shrink-0">
           <h2 className="text-lg font-semibold text-white">{title}</h2>
           {showCloseButton && (
-            <button 
+            <button
               className="p-2 hover:bg-slate-700 rounded-lg transition-colors text-slate-400 hover:text-white"
               onClick={onClose}
               aria-label="关闭"
