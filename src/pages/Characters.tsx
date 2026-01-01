@@ -315,7 +315,7 @@ export default function Characters() {
     const result: Partial<Character> = {}
     
     // 尝试匹配各种格式的字段
-    const patterns = {
+    const patterns: {[K in keyof Character]?: RegExp} = {
       name: /(?:姓名|name)[:：]\s*([^\n,，]+)/i,
       gender: /(?:性别|gender)[:：]\s*([^\n,，]+)/i,
       personality: /(?:性格|personality)[:：]\s*([^\n]+)/i,
@@ -327,7 +327,7 @@ export default function Characters() {
     
     for (const [key, pattern] of Object.entries(patterns)) {
       const match = text.match(pattern)
-      if (match && match[1] && key != undefined) {
+      if (match && match[1]) {
         result[key] = match[1].trim()
       }
     }
