@@ -327,7 +327,7 @@ export default function Characters() {
     
     for (const [key, pattern] of Object.entries(patterns)) {
       const match = text.match(pattern)
-      if (match && match[1]) {
+      if (match && match[1] && key != undefined) {
         result[key as keyof Character] = match[1].trim()
       }
     }
@@ -576,12 +576,6 @@ export default function Characters() {
         })
       }
       
-      // 构建角色类型提示
-      let typeHint = ''
-      if (character.notes) {
-        typeHint = `\n\n【角色类型】\n${character.notes}`
-      }
-      
       // 临时保存当前正在编辑的角色信息到 formData
       setFormData({
         name: character.name,
@@ -620,11 +614,6 @@ export default function Characters() {
     } finally {
       setGeneratingCharacterId(null)
     }
-  }
-
-  // 批量为所有角色生成详细信息
-  const handleGenerateAllCharacterDetails = () => {
-    alert('请逐个为角色生成详细信息。点击每个角色右侧的"生成详情"按钮。')
   }
 
   return (
@@ -1065,7 +1054,7 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
         isOpen={showBatchResultModal}
         onClose={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]) }}
         title={`批量创建完成 - ${batchCreatedCharacters.length} 个人物`}
-        maxWidth="3xl"
+        maxWidth="2xl"
         footer={
           <div className="flex gap-2">
             <button 
