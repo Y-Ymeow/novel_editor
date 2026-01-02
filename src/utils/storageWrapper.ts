@@ -14,7 +14,8 @@ export async function getNovels(): Promise<Novel[]> {
 export async function saveNovels(novels: Novel[]): Promise<void> {
   const settings = storage.getSettings()
   if (settings.storageType === 'indexedDB') {
-    await indexedDBStorage.saveNovels(novels)
+    // IndexedDB 模式下，只更新传入的小说，使用逐个 put 的方式
+    await indexedDBStorage.updateNovels(novels)
   } else {
     window.localStorage.setItem('ai_novel_novels', JSON.stringify(novels))
   }
@@ -102,7 +103,8 @@ export async function getChapters(novelId?: string): Promise<Chapter[]> {
 export async function saveChapters(chapters: Chapter[]): Promise<void> {
   const settings = storage.getSettings()
   if (settings.storageType === 'indexedDB') {
-    await indexedDBStorage.saveChapters(chapters)
+    // IndexedDB 模式下，只更新传入的章节，使用逐个 put 的方式
+    await indexedDBStorage.updateChapters(chapters)
   } else {
     window.localStorage.setItem('ai_novel_chapters', JSON.stringify(chapters))
   }

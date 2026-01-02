@@ -37,15 +37,20 @@ export default function NovelSelect() {
     const settings = storage.getSettings()
 
     if (editingId) {
-      const updated = novels.map(novel => 
-        novel.id === editingId 
-          ? { ...novel, ...formData, updatedAt: Date.now() }
-          : novel
+      // 编辑模式：只更新当前小说
+      const updatedNovel = {
+        ...novels.find(n => n.id === editingId)!,
+        ...formData,
+        updatedAt: Date.now(),
+      }
+      const updated = novels.map(novel =>
+        novel.id === editingId ? updatedNovel : novel
       )
       setNovels(updated)
-      await saveNovels(updated)
+      await saveNovels([updatedNovel])
       setEditingId(null)
     } else {
+      // 新增模式：只保存新小说
       const newNovel: Novel = {
         id: Date.now().toString(),
         ...formData,
@@ -53,12 +58,12 @@ export default function NovelSelect() {
         updatedAt: Date.now(),
       }
       setNovels([...novels, newNovel])
-      await saveNovels([...novels, newNovel])
-      
+      await saveNovels([newNovel])
+
       settings.selectedNovelId = newNovel.id
       await import('../utils/storage').then(m => m.storage.saveSettings(settings))
     }
-    
+
     setShowForm(false)
     setShowAiPanel(false)
     resetForm()

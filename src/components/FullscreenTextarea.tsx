@@ -50,7 +50,7 @@ const FullscreenTextarea = forwardRef<
 
       {isFullscreen && (
         <div className="fixed inset-0 bg-slate-900 z-50 flex flex-col">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-800 flex-shrink-0">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-slate-700 bg-slate-800 shrink-0">
             <h3 className="text-lg font-semibold text-white">全屏编辑</h3>
             <div className="flex items-center gap-3">
               <span className="text-sm text-slate-400">{value.length} 字</span>

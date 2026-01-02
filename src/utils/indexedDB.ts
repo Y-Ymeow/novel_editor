@@ -101,6 +101,21 @@ class IndexedDBStorage {
     return this.putAll(STORES.NOVELS, novels)
   }
 
+  async updateNovels(novels: Novel[]): Promise<void> {
+    if (!this.db) await this.init()
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(STORES.NOVELS, 'readwrite')
+      const store = transaction.objectStore(STORES.NOVELS)
+
+      novels.forEach(novel => {
+        store.put(novel)
+      })
+
+      transaction.onerror = () => reject(transaction.error)
+      transaction.oncomplete = () => resolve()
+    })
+  }
+
   async deleteNovel(id: string): Promise<void> {
     return this.deleteById(STORES.NOVELS, id)
   }
@@ -160,6 +175,21 @@ class IndexedDBStorage {
 
   async saveChapters(chapters: Chapter[]): Promise<void> {
     return this.putAll(STORES.CHAPTERS, chapters)
+  }
+
+  async updateChapters(chapters: Chapter[]): Promise<void> {
+    if (!this.db) await this.init()
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(STORES.CHAPTERS, 'readwrite')
+      const store = transaction.objectStore(STORES.CHAPTERS)
+
+      chapters.forEach(chapter => {
+        store.put(chapter)
+      })
+
+      transaction.onerror = () => reject(transaction.error)
+      transaction.oncomplete = () => resolve()
+    })
   }
 
   async deleteChapter(id: string): Promise<void> {

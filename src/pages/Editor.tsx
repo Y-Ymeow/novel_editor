@@ -142,7 +142,7 @@ export default function Editor() {
     };
 
     setChapters([...chapters, newChapter]);
-    await saveChapters([...chapters, newChapter]);
+    await saveChapters([newChapter]);
     setCurrentChapter(newChapter);
     setContent("");
     setShowChapterForm(false);
