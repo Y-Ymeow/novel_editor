@@ -3,13 +3,6 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import type { Chapter, Character, Novel } from "../types";
 import { storage } from "../utils/storage";
 import {
-  getChapters,
-  saveChapters,
-  getCharacters,
-  getNovels,
-  deleteChapter,
-} from "../utils/storageWrapper";
-import {
   buildContentPrompt,
   buildDescriptionPrompt as buildDescPrompt,
 } from "../utils/promptManager";
@@ -59,17 +52,17 @@ export default function Editor() {
   }, [streamingContent, isStreaming]);
 
   const loadChapters = async (novelId: string) => {
-    const loaded = await getChapters(novelId);
+    const loaded = await storage.getChapters(novelId);
     setChapters(loaded);
   };
 
   const loadCharacters = async (novelId: string) => {
-    const loaded = await getCharacters(novelId);
+    const loaded = await storage.getCharacters(novelId);
     setCharacters(loaded);
   };
 
   const loadNovel = async (novelId: string) => {
-    const novels = await getNovels();
+    const novels = await storage.getNovels();
     const novel = novels.find((n) => n.id === novelId);
     if (novel) {
       setCurrentNovel(novel);
@@ -77,7 +70,7 @@ export default function Editor() {
   };
 
   const loadChapter = async (chapterId: string, novelId: string) => {
-    const chapters = await getChapters(novelId);
+    const chapters = await storage.getChapters(novelId);
     const chapter = chapters.find((c) => c.id === chapterId);
     if (chapter) {
       setCurrentChapter(chapter);
@@ -85,18 +78,21 @@ export default function Editor() {
     }
   };
 
-  const settings = storage.getSettings();
+  // 初始化加载数据
+  useEffect(() => {
+    const settings = storage.getSettings();
 
-  if (settings.selectedNovelId) {
-    loadChapters(settings.selectedNovelId);
-    loadCharacters(settings.selectedNovelId);
-    loadNovel(settings.selectedNovelId);
+    if (settings.selectedNovelId) {
+      loadChapters(settings.selectedNovelId);
+      loadCharacters(settings.selectedNovelId);
+      loadNovel(settings.selectedNovelId);
 
-    const chapterId = searchParams.get("chapter");
-    if (chapterId) {
-      loadChapter(chapterId, settings.selectedNovelId);
+      const chapterId = searchParams.get("chapter");
+      if (chapterId) {
+        loadChapter(chapterId, settings.selectedNovelId);
+      }
     }
-  }
+  }, [currentNovelId]);
 
   const handleSave = async () => {
     if (!currentChapter) {
@@ -113,7 +109,7 @@ export default function Editor() {
       ch.id === currentChapter.id ? updatedChapter : ch,
     );
     setChapters(updatedChapters);
-    await saveChapters(updatedChapters);
+    await storage.saveChapters(updatedChapters);
     setCurrentChapter(updatedChapter);
   };
 
@@ -128,34 +124,38 @@ export default function Editor() {
       return;
     }
 
-    const maxOrder = Math.max(0, ...chapters.map((c) => c.order));
-    const newChapter: Chapter = {
-      id: Date.now().toString(),
-      novelId: currentNovelId,
-      title: chapterFormData.title,
-      order: maxOrder + 1,
-      description: chapterFormData.description,
-      content: "",
-      status: chapterFormData.status,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    };
+    try {
+      const maxOrder = Math.max(0, ...chapters.map((c) => c.order));
+      const newChapter: Chapter = {
+        id: Date.now().toString(),
+        novelId: currentNovelId,
+        title: chapterFormData.title,
+        order: maxOrder + 1,
+        description: chapterFormData.description,
+        content: "",
+        status: chapterFormData.status,
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+      };
 
-    setChapters([...chapters, newChapter]);
-    await saveChapters([newChapter]);
-    setCurrentChapter(newChapter);
-    setContent("");
-    setShowChapterForm(false);
-    setChapterFormData({ title: "", description: "", status: "draft" });
+      setChapters([...chapters, newChapter]);
+      await storage.saveChapter(newChapter);
+
+      setCurrentChapter(newChapter);
+      setContent("");
+      setShowChapterForm(false);
+      setChapterFormData({ title: "", description: "", status: "draft" });
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      alert('创建章节失败: ' + errorMessage)
+    }
   };
 
   const handleDeleteChapter = async (id: string) => {
     if (confirm("确定要删除这个章节吗？")) {
-      // 直接删除数据库中的记录
-      await deleteChapter(id);
-      // 更新当前显示的章节列表（只显示当前小说的）
+      await storage.deleteChapter(id);
       if (currentNovelId) {
-        const currentNovelChapters = await getChapters(currentNovelId);
+        const currentNovelChapters = await storage.getChapters(currentNovelId);
         setChapters(currentNovelChapters);
         if (currentChapter?.id === id) {
           setCurrentChapter(
@@ -198,7 +198,7 @@ export default function Editor() {
       ch.id === currentChapter.id ? updatedChapter : ch,
     );
     setChapters(updatedChapters);
-    await saveChapters(updatedChapters);
+    await storage.saveChapters(updatedChapters);
     setCurrentChapter(updatedChapter);
     setShowEditDescription(false);
   };

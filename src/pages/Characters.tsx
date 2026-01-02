@@ -2,8 +2,6 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Character, Novel } from '../types'
 import { storage } from '../utils/storage'
-import { getCharacters, deleteCharacter, updateCharacter, createCharacter } from '../utils/storageWrapper'
-import { getNovels } from '../utils/storageWrapper'
 import { buildCharacterPrompt } from '../utils/promptManager'
 import Modal from '../components/Modal'
 import AiInput from '../components/AiInput'
@@ -58,12 +56,12 @@ export default function Characters() {
   }, [])
 
   const loadCharacters = async (novelId: string) => {
-    const loaded = await getCharacters(novelId)
+    const loaded = await storage.getCharacters(novelId)
     setCharacters(loaded)
   }
 
   const loadNovel = async (novelId: string) => {
-    const novels = await getNovels()
+    const novels = await storage.getNovels()
     const novel = novels.find((n) => n.id === novelId)
     if (novel) {
       setCurrentNovel(novel)
@@ -82,9 +80,7 @@ export default function Characters() {
     }
 
     if (editingId) {
-      // 编辑模式：更新现有人物
-      await updateCharacter(editingId, formData)
-      // 更新本地状态
+      await storage.updateCharacter(editingId, formData)
       const updated = characters.map(char =>
         char.id === editingId
           ? { ...char, ...formData }
@@ -92,15 +88,13 @@ export default function Characters() {
       )
       setCharacters(updated)
     } else {
-      // 创建模式：创建新人物
       const newCharacter: Character = {
         id: Date.now().toString(),
         novelId: currentNovelId,
         ...formData,
         createdAt: Date.now(),
       }
-      await createCharacter(newCharacter)
-      // 更新本地状态
+      await storage.saveCharacter(newCharacter)
       setCharacters([...characters, newCharacter])
     }
 
@@ -134,11 +128,9 @@ export default function Characters() {
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这个人物吗？')) {
-      // 直接删除数据库中的记录
-      await deleteCharacter(id)
-      // 更新当前显示的人物列表（只显示当前小说的）
+      await storage.deleteCharacter(id)
       if (currentNovelId) {
-        const allCharacters = await getCharacters(currentNovelId)
+        const allCharacters = await storage.getCharacters(currentNovelId)
         setCharacters(allCharacters)
       }
       if (selectedCharacter?.id === id) {
@@ -388,7 +380,7 @@ export default function Characters() {
               createdAt: Date.now(),
             }
             newCharacters.push(newCharacter)
-            await createCharacter(newCharacter)
+            await storage.saveCharacter(newCharacter)
             continue
           } catch (e) {
             console.error(e)
@@ -443,7 +435,7 @@ export default function Characters() {
           createdAt: Date.now(),
         }
         newCharacters.push(newCharacter)
-        await createCharacter(newCharacter)
+        await storage.saveCharacter(newCharacter)
       }
 
       setCharacters([...characters, ...newCharacters])

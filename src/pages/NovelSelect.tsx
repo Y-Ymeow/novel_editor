@@ -1,7 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { Novel } from '../types'
-import { getNovels, saveNovels, deleteNovel } from '../utils/storageWrapper'
 import { storage } from '../utils/storage'
 import Modal from '../components/Modal'
 import AiInput from '../components/AiInput'
@@ -24,7 +23,7 @@ export default function NovelSelect() {
   }, [])
 
   const loadNovels = async () => {
-    const loaded = await getNovels()
+    const loaded = await storage.getNovels()
     setNovels(loaded)
   }
 
@@ -34,39 +33,42 @@ export default function NovelSelect() {
       return
     }
 
-    const settings = storage.getSettings()
+    try {
+      const settings = storage.getSettings()
 
-    if (editingId) {
-      // 编辑模式：只更新当前小说
-      const updatedNovel = {
-        ...novels.find(n => n.id === editingId)!,
-        ...formData,
-        updatedAt: Date.now(),
-      }
-      const updated = novels.map(novel =>
-        novel.id === editingId ? updatedNovel : novel
-      )
-      setNovels(updated)
-      await saveNovels([updatedNovel])
-      setEditingId(null)
-    } else {
-      // 新增模式：只保存新小说
-      const newNovel: Novel = {
-        id: Date.now().toString(),
-        ...formData,
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-      }
-      setNovels([...novels, newNovel])
-      await saveNovels([newNovel])
+      if (editingId) {
+        const updatedNovel = {
+          ...novels.find(n => n.id === editingId)!,
+          ...formData,
+          updatedAt: Date.now(),
+        }
+        const updated = novels.map(novel =>
+          novel.id === editingId ? updatedNovel : novel
+        )
+        setNovels(updated)
+        await storage.saveNovel(updatedNovel)
+        setEditingId(null)
+      } else {
+        const newNovel: Novel = {
+          id: Date.now().toString(),
+          ...formData,
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        }
+        setNovels([...novels, newNovel])
+        await storage.saveNovel(newNovel)
 
-      settings.selectedNovelId = newNovel.id
-      await import('../utils/storage').then(m => m.storage.saveSettings(settings))
+        settings.selectedNovelId = newNovel.id
+        storage.saveSettings(settings)
+      }
+
+      setShowForm(false)
+      setShowAiPanel(false)
+      resetForm()
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : '未知错误'
+      alert('保存失败: ' + errorMessage)
     }
-
-    setShowForm(false)
-    setShowAiPanel(false)
-    resetForm()
   }
 
   const handleEdit = (novel: Novel) => {
@@ -81,15 +83,15 @@ export default function NovelSelect() {
 
   const handleDelete = async (id: string) => {
     if (confirm('确定要删除这本小说吗？相关的人物和章节也会被删除。')) {
-      await deleteNovel(id)
-      
+      await storage.deleteNovel(id)
+
       const updated = novels.filter(novel => novel.id !== id)
       setNovels(updated)
-      
+
       const settings = storage.getSettings()
       if (settings.selectedNovelId === id) {
         settings.selectedNovelId = updated.length > 0 ? updated[0].id : null
-        await import('../utils/storage').then(m => m.storage.saveSettings(settings))
+        storage.saveSettings(settings)
       }
     }
   }
@@ -97,7 +99,7 @@ export default function NovelSelect() {
   const handleSelect = async (id: string) => {
     const settings = storage.getSettings()
     settings.selectedNovelId = id
-    await import('../utils/storage').then(m => m.storage.saveSettings(settings))
+    storage.saveSettings(settings)
     navigate('/editor')
   }
 
@@ -116,49 +118,55 @@ export default function NovelSelect() {
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-4xl">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
           <h1 className="text-3xl font-bold">📚 AI 小说生成器</h1>
           <div className="flex gap-2">
-            <button 
+            <button
               className="px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
               onClick={() => { setShowForm(true); setEditingId(null); resetForm() }}
             >
-              + 创建小说
+              + 新建
             </button>
-            <button 
-              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
+            <button
+              className="px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors sm:hidden"
+              onClick={() => navigate('/settings')}
+              aria-label="设置"
+            >
+              ⚙️
+            </button>
+            <button
+              className="px-6 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors hidden sm:block"
               onClick={() => navigate('/settings')}
             >
               ⚙️ 设置
             </button>
-          </div>
-        </div>
+          </div>        </div>
 
         <Modal
           isOpen={showForm}
-          onClose={() => { 
-            setShowForm(false); 
-            setShowAiPanel(false); 
-            setEditingId(null); 
-            resetForm() 
+          onClose={() => {
+            setShowForm(false);
+            setShowAiPanel(false);
+            setEditingId(null);
+            resetForm()
           }}
           title={editingId ? '编辑小说' : '创建新小说'}
           maxWidth="lg"
           footer={
             <div className="flex gap-2">
-              <button 
-                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors" 
+              <button
+                className="flex-1 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition-colors"
                 onClick={handleSave}
               >
                 保存
               </button>
-              <button 
+              <button
                 className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
-                onClick={() => { 
-                  setShowForm(false); 
-                  setShowAiPanel(false); 
-                  setEditingId(null); 
-                  resetForm() 
+                onClick={() => {
+                  setShowForm(false);
+                  setShowAiPanel(false);
+                  setEditingId(null);
+                  resetForm()
                 }}
               >
                 取消
@@ -195,9 +203,9 @@ export default function NovelSelect() {
                 placeholder="小说简介..."
               />
             </div>
-            
+
             {showAiPanel && (
-              <AiInput 
+              <AiInput
                 onGenerate={handleAiGenerate}
                 placeholder="描述你想要的小说类型和主题，AI 将为您生成简介"
                 buttonText="🚀 生成简介"
@@ -233,7 +241,7 @@ ${formData.description ? `当前简介（可以在此基础上优化）：\n${fo
             </div>
           ) : (
             novels.map((novel) => (
-              <div 
+              <div
                 key={novel.id}
                 className="bg-slate-800 rounded-2xl border border-slate-700 overflow-hidden hover:border-slate-600 transition-all hover:scale-105 cursor-pointer"
                 onClick={() => handleSelect(novel.id)}
@@ -249,19 +257,19 @@ ${formData.description ? `当前简介（可以在此基础上优化）：\n${fo
                   <h3 className="font-bold text-xl mb-2">{novel.title}</h3>
                   <p className="text-sm text-slate-400 line-clamp-2 mb-4">{novel.description || '暂无简介'}</p>
                   <div className="flex gap-2">
-                    <button 
+                    <button
                       className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-xl text-sm font-medium transition-colors"
                       onClick={(e) => { e.stopPropagation(); handleSelect(novel.id) }}
                     >
                       打开
                     </button>
-                    <button 
+                    <button
                       className="px-4 py-2 border border-slate-600 text-slate-300 hover:bg-slate-700 rounded-xl text-sm font-medium transition-colors"
                       onClick={(e) => { e.stopPropagation(); handleEdit(novel) }}
                     >
                       编辑
                     </button>
-                    <button 
+                    <button
                       className="px-4 py-2 border border-red-600 text-red-400 hover:bg-red-900/30 rounded-xl text-sm font-medium transition-colors"
                       onClick={(e) => { e.stopPropagation(); handleDelete(novel.id) }}
                     >

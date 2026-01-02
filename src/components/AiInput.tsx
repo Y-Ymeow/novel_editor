@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { storage } from "../utils/storage";
 import { callOpenAIStream } from "../utils/api";
-import { getCharacters, getChapters } from "../utils/storageWrapper";
 import Modal from "./Modal";
 import type { ApiConfig, ModelConfig, Character, Chapter } from "../types";
 
@@ -101,12 +100,12 @@ export default function AiInput({
   }, [currentNovelId]);
 
   const loadCharacters = async (novelId: string) => {
-    const loaded = await getCharacters(novelId);
+    const loaded = await storage.getCharacters(novelId);
     setCharacters(loaded);
   };
 
   const loadChapters = async (novelId: string) => {
-    const loaded = await getChapters(novelId);
+    const loaded = await storage.getChapters(novelId);
     setChapters(loaded);
   };
 

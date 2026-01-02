@@ -17,8 +17,8 @@ export interface ApiConfig {
 export interface DatabaseConfig {
   id: string
   name: string
-  type: 'mongodb'
-  connectionString: string
+  type: 'localStorage' | 'indexedDB' | 'mongodb'
+  connectionString?: string
   enabled: boolean
 }
 
@@ -33,7 +33,7 @@ export interface Novel {
 
 export interface Character {
   id: string
-  novelId: string | number
+  novelId: string
   name: string
   gender: string
   personality: string
@@ -46,7 +46,7 @@ export interface Character {
 
 export interface Chapter {
   id: string
-  novelId: string | number
+  novelId: string
   title: string
   order: number
   description: string

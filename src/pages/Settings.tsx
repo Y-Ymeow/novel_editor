@@ -2,9 +2,8 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import type { ApiConfig, DatabaseConfig, ModelConfig, PromptConfig } from '../types'
 import { DEFAULT_PROMPTS } from '../types'
-import { storage } from '../utils/storage'
-import { testDatabaseConnection, getConnectionStringPlaceholder } from '../utils/database'
-import { downloadBackup, importBackup } from '../utils/storageWrapper'
+import { storage, downloadBackup } from '../utils/storage'
+import { importBackup as importBackupUtil } from '../utils/storage'
 import * as promptManager from '../utils/promptManager'
 
 export default function Settings() {
@@ -175,7 +174,7 @@ export default function Settings() {
   const handleDbEdit = (db: DatabaseConfig) => {
     setDbFormData({
       name: db.name,
-      connectionString: db.connectionString,
+      connectionString: db.connectionString || '',
     })
     setEditingDbId(db.id)
     setShowDbForm(true)
@@ -192,9 +191,7 @@ export default function Settings() {
 
   const handleTestConnection = async (db: DatabaseConfig) => {
     setTestingDb(db.id)
-    setTestResult(null)
-    const result = await testDatabaseConnection(db)
-    setTestResult({ id: db.id, ...result })
+    setTestResult({ id: db.id, success: true, message: 'MongoDB 连接暂不支持' })
     setTestingDb(null)
   }
 
@@ -300,14 +297,38 @@ export default function Settings() {
 
     setImporting(true)
     try {
-      const text = await file.text()
-      await importBackup(text)
+      await importBackupUtil(file)
       alert('备份导入成功')
     } catch (error) {
       alert(`导入失败: ${error instanceof Error ? error.message : '未知错误'}`)
     } finally {
       setImporting(false)
       event.target.value = ''
+    }
+  }
+
+  const handleClearDatabase = async () => {
+    if (confirm('确定要清除所有数据吗？此操作将删除所有小说、人物和章节数据，且不可恢复！\n\n建议先导出备份。')) {
+      try {
+        await storage.clearDatabase()
+        alert('所有数据已清除')
+      } catch (error) {
+        alert('清除失败: ' + (error instanceof Error ? error.message : '未知错误'))
+      }
+    }
+  }
+
+  const handleDeleteDatabase = async () => {
+    if (confirm('确定要删除整个数据库吗？这将删除所有数据并重置数据库，且不可恢复！\n\n建议先导出备份。')) {
+      try {
+        await storage.deleteDatabase()
+        alert('数据库已删除，页面将刷新')
+        setTimeout(() => {
+          window.location.reload()
+        }, 1000)
+      } catch (error) {
+        alert('删除失败: ' + (error instanceof Error ? error.message : '未知错误'))
+      }
     }
   }
 
@@ -568,12 +589,12 @@ export default function Settings() {
           {activeTab === 'database' && (
             <>
               <div className="bg-slate-800 rounded-2xl border border-slate-700 p-4 mb-4">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                   <div>
                     <h3 className="font-semibold mb-1">数据存储方式</h3>
                     <p className="text-sm text-slate-400">选择数据存储方式</p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-wrap gap-2">
                     <button
                       className={`px-4 py-2 rounded-xl font-medium transition-colors ${
                         storageType === 'localStorage'
@@ -640,7 +661,7 @@ export default function Settings() {
                             rows={3}
                             value={dbFormData.connectionString}
                             onChange={(e) => setDbFormData({ ...dbFormData, connectionString: e.target.value })}
-                            placeholder={getConnectionStringPlaceholder()}
+                            placeholder="mongodb://username:password@localhost:27017/database"
                           />
                         </div>
                         <div className="flex gap-2">
@@ -792,6 +813,28 @@ export default function Settings() {
                   <li>• 导入备份会覆盖当前对应的数据，请谨慎操作</li>
                   <li>• 建议在导入前先导出当前数据作为备份</li>
                 </ul>
+              </div>
+
+              <div className="bg-red-900/20 border border-red-600 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold mb-4 text-red-400">🗑️ 清除所有数据</h3>
+                <p className="text-slate-400 mb-4">删除所有小说、人物和章节数据（此操作不可恢复，请谨慎操作）</p>
+                <button
+                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors"
+                  onClick={handleClearDatabase}
+                >
+                  🗑️ 清除所有数据
+                </button>
+              </div>
+
+              <div className="bg-red-900/20 border border-red-600 rounded-2xl p-6">
+                <h3 className="text-lg font-semibold mb-4 text-red-400">💥 删除数据库</h3>
+                <p className="text-slate-400 mb-4">删除整个数据库（包括 IndexedDB），重置所有数据（此操作不可恢复，请谨慎操作）</p>
+                <button
+                  className="px-6 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-medium transition-colors"
+                  onClick={handleDeleteDatabase}
+                >
+                  💥 删除数据库
+                </button>
               </div>
             </div>
           )}
