@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { storage } from "../utils/storage";
 import { callOpenAIStream } from "../utils/api";
 import Modal from "./Modal";
-import type { ApiConfig, ModelConfig, Character, Chapter } from "../types";
+import type { ApiConfig, Character, Chapter, Plot } from "../types";
 
 interface AiInputProps {
   onGenerate: (content: string) => void;
@@ -32,28 +32,23 @@ export default function AiInput({
   const [selectedModel, setSelectedModel] = useState("");
   const [enableThinking, setEnableThinking] = useState(false);
   const [thinkingTokens, setThinkingTokens] = useState(1000);
-  const [currentModelConfig, setCurrentModelConfig] =
-    useState<ModelConfig | null>(null);
 
   const [characters, setCharacters] = useState<Character[]>([]);
   const [chapters, setChapters] = useState<Chapter[]>([]);
+  const [plots, setPlots] = useState<Plot[]>([]);
   const [selectedCharacters, setSelectedCharacters] = useState<string[]>([]);
+  const [selectedChapters, setSelectedChapters] = useState<string[]>([]);
+  const [selectedPlots, setSelectedPlots] = useState<string[]>([]);
   const [showContextSelector, setShowContextSelector] = useState(false);
-  const [selectedChapterContents, setSelectedChapterContents] = useState<
-    string[]
-  >([]);
-  const [selectedChapterDescriptions, setSelectedChapterDescriptions] =
-    useState<string[]>([]);
-  const [characterTab, setCharacterTab] = useState<"summary" | "full">(
-    "summary",
-  ); // 添加人物信息显示选项
-  const [chapterContentTab, setChapterContentTab] = useState<
-    "summary" | "full"
-  >("summary"); // 添加章节内容显示选项
+  const [showModelSelectorModal, setShowModelSelectorModal] = useState(false);
+  const [contextTab, setContextTab] = useState<"characters" | "chapters" | "plots">("characters");
+  const [characterDetailMode, setCharacterDetailMode] = useState<"summary" | "full">("summary");
+  const [chapterDetailMode, setChapterDetailMode] = useState<"summary" | "full">("summary");
 
   // 添加用于非流式输出的内容预览状态
   const [showPreview, setShowPreview] = useState(false);
   const [previewContent, setPreviewContent] = useState("");
+  const [isThinking, setIsThinking] = useState(false);
 
   // 使用useRef来跟踪完整内容
   const fullContentRef = useRef("");
@@ -84,10 +79,6 @@ export default function AiInput({
       );
       if (selectedApi) {
         setSelectedModel(selectedApi.selectedModel);
-        const modelConfig = selectedApi.models.find(
-          (m) => m.name === selectedApi.selectedModel,
-        );
-        setCurrentModelConfig(modelConfig || null);
       }
     }
   }, []);
@@ -96,6 +87,7 @@ export default function AiInput({
     if (currentNovelId) {
       loadCharacters(currentNovelId);
       loadChapters(currentNovelId);
+      loadPlots(currentNovelId);
     }
   }, [currentNovelId]);
 
@@ -107,6 +99,11 @@ export default function AiInput({
   const loadChapters = async (novelId: string) => {
     const loaded = await storage.getChapters(novelId);
     setChapters(loaded);
+  };
+
+  const loadPlots = async (novelId: string) => {
+    const loaded = await storage.getPlots(novelId);
+    setPlots(loaded);
   };
 
   const handleGenerate = async () => {
@@ -148,15 +145,12 @@ export default function AiInput({
           const char = characters.find((c) => c.id === charId);
           if (char) {
             let charDescription = "";
-            if (characterTab === "summary") {
-              // 如果有摘要则使用摘要，否则使用性格或背景的简短描述
-              charDescription =
-                char.summary ||
-                `${char.personality || ""} ${char.background || ""}`.trim() ||
-                "暂无描述";
+            if (characterDetailMode === "summary") {
+              charDescription = char.summary ||
+                  `${char.personality || ""} ${char.background || ""}`.trim() ||
+                  "暂无描述";
             } else {
-              // 使用完整的人物信息
-              charDescription = `姓名：${char.name}，性别：${char.gender || "未指定"}，性格：${char.personality || "未填写"}，背景：${char.background || "未填写"}，关系：${char.relationships || "未填写"}，备注：${char.notes || "无"}`;
+              charDescription = `姓名：${char.name}\n性别：${char.gender}\n性格：${char.personality}\n背景：${char.background}\n人际关系：${char.relationships}\n备注：${char.notes}`;
             }
             enhancedSystemPrompt += `- ${char.name}：${charDescription}\n`;
           }
@@ -164,40 +158,33 @@ export default function AiInput({
       }
 
       // 添加选中的章节信息
-      if (selectedChapterContents.length > 0) {
-        enhancedSystemPrompt += "\n\n参考章节正文：\n";
-        selectedChapterContents.forEach((chapId) => {
+      if (selectedChapters.length > 0) {
+        enhancedSystemPrompt += "\n\n参考章节：\n";
+        selectedChapters.forEach((chapId) => {
           const chap = chapters.find((c) => c.id === chapId);
           if (chap) {
-            let chapterContent = "";
-            if (chapterContentTab === "summary") {
-              // 使用章节标题和内容的简短摘要
-              const contentPreview = chap.content
-                ? `${chap.content.substring(0, 200)}...`
-                : "无内容";
-              chapterContent = `章节 ${chap.order}：${chap.title} - ${contentPreview}`;
+            enhancedSystemPrompt += `章节 ${chap.order}：${chap.title}\n`;
+            if (chapterDetailMode === "summary") {
+              if (chap.description) {
+                enhancedSystemPrompt += `描述：${chap.description}\n`;
+              }
             } else {
-              // 使用完整的章节内容
-              chapterContent = `章节 ${chap.order}：${chap.title}\n内容：${chap.content || "无内容"}`;
+              if (chap.content) {
+                enhancedSystemPrompt += `内容：${chap.content}\n`;
+              }
             }
-            enhancedSystemPrompt += `${chapterContent}\n`;
+            enhancedSystemPrompt += "\n";
           }
         });
       }
-      if (selectedChapterDescriptions.length > 0) {
-        enhancedSystemPrompt += "\n\n参考章节描述：\n";
-        selectedChapterDescriptions.forEach((chapId) => {
-          const chap = chapters.find((c) => c.id === chapId);
-          if (chap && chap.description) {
-            let chapterDescription = "";
-            if (chapterContentTab === "summary") {
-              // 使用简短的描述
-              chapterDescription = `章节 ${chap.order}：${chap.title}\n描述：${chap.description}`;
-            } else {
-              // 使用完整的描述信息
-              chapterDescription = `章节 ${chap.order}：${chap.title}\n完整描述：${chap.description}`;
-            }
-            enhancedSystemPrompt += `${chapterDescription}\n`;
+
+      // 添加选中的情节信息
+      if (selectedPlots.length > 0) {
+        enhancedSystemPrompt += "\n\n参考情节：\n";
+        selectedPlots.forEach((plotId) => {
+          const plot = plots.find((p) => p.id === plotId);
+          if (plot) {
+            enhancedSystemPrompt += `${plot.title}：${plot.content}\n\n`;
           }
         });
       }
@@ -230,6 +217,11 @@ export default function AiInput({
           // 添加原始数据到所有内容中，用于预览
           allContentRef.current = rawData;
 
+          // 检查是否正在思考
+          const hasThinkingTag = rawData.includes('<thinking>');
+          const hasClosingTag = rawData.includes('</thinking>');
+          setIsThinking(hasThinkingTag && !hasClosingTag);
+
           // 只有在没有onStreaming回调时才更新预览
           if (!onStreaming) {
             setPreviewContent(allContentRef.current);
@@ -256,6 +248,7 @@ export default function AiInput({
       alert(`生成失败: ${error instanceof Error ? error.message : "未知错误"}`);
     } finally {
       setIsGenerating(false);
+      setIsThinking(false);
     }
   };
 
@@ -264,20 +257,13 @@ export default function AiInput({
     const api = apis.find((a) => a.id === apiId);
     if (api) {
       setSelectedModel(api.selectedModel);
-      const modelConfig = api.models.find((m) => m.name === api.selectedModel);
-      setCurrentModelConfig(modelConfig || null);
       setEnableThinking(false);
     }
   };
 
   const handleModelChange = (model: string) => {
     setSelectedModel(model);
-    const api = apis.find((a) => a.id === selectedApiId);
-    if (api) {
-      const modelConfig = api.models.find((m) => m.name === model);
-      setCurrentModelConfig(modelConfig || null);
-      setEnableThinking(false);
-    }
+    setEnableThinking(false);
   };
 
   const toggleCharacter = (charId: string) => {
@@ -289,19 +275,19 @@ export default function AiInput({
   };
 
   const toggleChapter = (chapId: string) => {
-    if (chapterContentTab === "full") {
-      setSelectedChapterContents((prev) =>
-        prev.includes(chapId)
-          ? prev.filter((id) => id !== chapId)
-          : [...prev, chapId],
-      );
-    } else {
-      setSelectedChapterDescriptions((prev) =>
-        prev.includes(chapId)
-          ? prev.filter((id) => id !== chapId)
-          : [...prev, chapId],
-      );
-    }
+    setSelectedChapters((prev) =>
+      prev.includes(chapId)
+        ? prev.filter((id) => id !== chapId)
+        : [...prev, chapId],
+    );
+  };
+
+  const togglePlot = (plotId: string) => {
+    setSelectedPlots((prev) =>
+      prev.includes(plotId)
+        ? prev.filter((id) => id !== plotId)
+        : [...prev, plotId],
+    );
   };
 
   return (
@@ -313,8 +299,13 @@ export default function AiInput({
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-slate-800 border border-slate-600 rounded-xl max-w-2xl w-full max-h-96 overflow-hidden flex flex-col">
             <div className="p-4 border-b border-slate-700 flex justify-between items-center">
-              <h3 className="text-lg font-semibold text-white">
+              <h3 className="text-lg font-semibold text-white flex items-center gap-2">
                 AI 生成内容预览
+                {isThinking && (
+                  <span className="flex items-center gap-1 text-sm text-purple-400 animate-pulse">
+                    🧠 思考中...
+                  </span>
+                )}
               </h3>
               <button
                 className="text-slate-400 hover:text-white"
@@ -327,9 +318,57 @@ export default function AiInput({
               ref={previewScrollRef}
               className="p-4 overflow-y-auto grow bg-slate-900"
             >
-              <pre className="whitespace-pre-wrap warp-break-words text-slate-300">
-                {previewContent || "正在生成..."}
-              </pre>
+              {previewContent ? (
+                <div className="whitespace-pre-wrap break-words text-slate-300">
+                  {(() => {
+                    // 使用正则表达式匹配 thinking 标签
+                    const thinkingRegex = /<thinking>([\s\S]*?)(<\/thinking>|$)/g;
+                    const parts: Array<{ type: 'thinking' | 'normal'; content: string }> = [];
+                    let lastIndex = 0;
+                    let match;
+
+                    while ((match = thinkingRegex.exec(previewContent)) !== null) {
+                      // 添加 thinking 标签之前的正常内容
+                      if (match.index > lastIndex) {
+                        const normalContent = previewContent.slice(lastIndex, match.index);
+                        if (normalContent) {
+                          parts.push({ type: 'normal', content: normalContent });
+                        }
+                      }
+
+                      // 添加 thinking 内容
+                      if (match[1]) {
+                        parts.push({ type: 'thinking', content: match[1] });
+                      }
+
+                      lastIndex = match.index + match[0].length;
+                    }
+
+                    // 添加剩余的正常内容
+                    if (lastIndex < previewContent.length) {
+                      const remainingContent = previewContent.slice(lastIndex);
+                      if (remainingContent) {
+                        parts.push({ type: 'normal', content: remainingContent });
+                      }
+                    }
+
+                    return parts.map((part, index) => (
+                      <div key={index}>
+                        {part.type === 'thinking' ? (
+                          <div className="my-3 p-3 bg-purple-900/30 border border-purple-700/50 rounded-lg">
+                            <div className="text-xs text-purple-400 mb-2 font-medium">🧠 思考过程</div>
+                            <div className="text-sm text-purple-200">{part.content}</div>
+                          </div>
+                        ) : (
+                          <span>{part.content}</span>
+                        )}
+                      </div>
+                    ));
+                  })()}
+                </div>
+              ) : (
+                <div className="text-slate-400">正在生成...</div>
+              )}
             </div>
             <div className="p-4 border-t border-slate-700 flex justify-end">
               <button
@@ -352,59 +391,40 @@ export default function AiInput({
               </div>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-400 whitespace-nowrap">
-                    API:
-                  </label>
-                  <select
-                    className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    value={selectedApiId || ""}
-                    onChange={(e) => handleApiChange(e.target.value)}
-                    disabled={isGenerating}
-                  >
-                    {apis.map((api) => (
-                      <option key={api.id} value={api.id}>
-                        {api.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex items-center gap-2">
-                  <label className="text-sm text-slate-400 whitespace-nowrap">
-                    模型:
-                  </label>
-                  {selectedApiId ? (
-                    <select
-                      className="flex-1 px-3 py-1.5 bg-slate-900 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      value={selectedModel}
-                      onChange={(e) => handleModelChange(e.target.value)}
-                      disabled={isGenerating}
-                    >
-                      {apis
-                        .find((api) => api.id === selectedApiId)
-                        ?.models.map((model) => (
-                          <option key={model.name} value={model.name}>
-                            {model.name}
-                            {model.canThink && " 🧠"}
-                            {model.canUseTools && " 🔧"}
-                          </option>
-                        ))}
-                    </select>
-                  ) : (
-                    <span className="text-sm text-slate-500">请选择 API</span>
-                  )}
-                </div>
+                <button
+                  className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-left text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 hover:border-slate-500 transition-colors"
+                  onClick={() => setShowModelSelectorModal(true)}
+                  disabled={isGenerating}
+                >
+                  {selectedModel
+                    ? `🤖 ${selectedModel}`
+                    : "选择模型..."}
+                </button>
+              </>
+            )}
+          </div>
+        )}
 
-                {currentModelConfig && currentModelConfig.canThink && (
+        {/* 模型选择器 Modal */}
+        <Modal
+          isOpen={showModelSelectorModal}
+          onClose={() => setShowModelSelectorModal(false)}
+          title="选择模型"
+          maxWidth="2xl"
+          footer={
+            <div className="space-y-4">
+              {/* 思考设置 */}
+              {selectedModel && (() => {
+                const model = apis.find(a => a.id === selectedApiId)?.models.find(m => m.name === selectedModel);
+                return model?.canThink ? (
                   <div className="bg-slate-700/50 rounded-lg p-3">
                     <div className="flex items-center justify-between mb-2">
                       <label className="flex items-center gap-2 text-sm text-slate-300 cursor-pointer">
                         <input
                           type="checkbox"
-                          id="enable-thinking"
+                          id="enable-thinking-modal"
                           checked={enableThinking}
                           onChange={(e) => setEnableThinking(e.target.checked)}
-                          disabled={isGenerating}
                           className="rounded"
                         />
                         <span>🧠 启用思考模式</span>
@@ -425,10 +445,7 @@ export default function AiInput({
                             max="10000"
                             step="100"
                             value={thinkingTokens}
-                            onChange={(e) =>
-                              setThinkingTokens(parseInt(e.target.value))
-                            }
-                            disabled={isGenerating}
+                            onChange={(e) => setThinkingTokens(parseInt(e.target.value))}
                             className="flex-1"
                           />
                           <span className="text-xs text-slate-300 w-16 text-right">
@@ -441,14 +458,89 @@ export default function AiInput({
                       </div>
                     )}
                   </div>
-                )}
-              </>
+                ) : null;
+              })()}
+
+              <div className="flex gap-2">
+                <button
+                  className="flex-1 px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg font-medium transition-colors"
+                  onClick={() => setShowModelSelectorModal(false)}
+                >
+                  关闭
+                </button>
+              </div>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">选择 API</label>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
+                {apis.map((api) => (
+                  <button
+                    key={api.id}
+                    className={`p-3 rounded-lg border text-left transition-colors ${
+                      selectedApiId === api.id
+                        ? "bg-blue-600/20 border-blue-500 text-blue-400"
+                        : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                    }`}
+                    onClick={() => {
+                      handleApiChange(api.id);
+                    }}
+                  >
+                    <div className="font-medium">{api.name}</div>
+                    <div className="text-xs text-slate-400">{api.models.length} 个模型</div>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {selectedApiId && (
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-2">选择模型</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
+                  {apis
+                    .find((api) => api.id === selectedApiId)
+                    ?.models.map((model) => (
+                      <button
+                        key={model.name}
+                        className={`p-4 rounded-lg border text-left transition-colors ${
+                          selectedModel === model.name
+                            ? "bg-blue-600/20 border-blue-500 text-blue-400"
+                            : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                        }`}
+                        onClick={() => {
+                          handleModelChange(model.name);
+                        }}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="font-medium">{model.name}</div>
+                          <div className="flex gap-2">
+                            {model.canThink && (
+                              <span className="px-2 py-0.5 bg-purple-600/30 text-purple-400 rounded text-xs">
+                                🧠 思考
+                              </span>
+                            )}
+                            {model.canUseTools && (
+                              <span className="px-2 py-0.5 bg-green-600/30 text-green-400 rounded text-xs">
+                                🔧 工具
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                        <div className="text-xs text-slate-400 mt-1">
+                          最大令牌: {model.maxTokens}
+                        </div>
+                      </button>
+                    ))}
+                </div>
+              </div>
             )}
           </div>
-        )}
+        </Modal>
 
         {/* 上下文选择器 */}
-        {currentNovelId && (characters.length > 0 || chapters.length > 0) && (
+        {currentNovelId && (characters.length > 0 || chapters.length > 0 || plots.length > 0) && (
           <div className="border border-slate-600 rounded-lg p-3">
             <button
               className="flex items-center justify-between w-full text-left"
@@ -463,12 +555,12 @@ export default function AiInput({
               <span className="text-slate-400">▶</span>
             </button>
             {(selectedCharacters.length > 0 ||
-              selectedChapterContents.length > 0 ||
-              selectedChapterDescriptions.length > 0) && (
+              selectedChapters.length > 0 ||
+              selectedPlots.length > 0) && (
               <div className="text-xs text-green-400 mt-2">
                 ✓ 已选择 {selectedCharacters.length} 个人物，
-                {selectedChapterContents.length} 个章节正文，
-                {selectedChapterDescriptions.length} 个章节描述
+                {selectedChapters.length} 个章节，
+                {selectedPlots.length} 个情节
               </div>
             )}
           </div>
@@ -490,101 +582,206 @@ export default function AiInput({
           }
         >
           <div className="space-y-4">
-            {characters.length > 0 && (
+            {/* 大 Tab 选择 */}
+            <div className="flex border-b border-slate-700">
+              <button
+                className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
+                  contextTab === "characters"
+                    ? "text-blue-400 border-b-2 border-blue-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                onClick={() => setContextTab("characters")}
+              >
+                👤 人物
+                {selectedCharacters.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-600 rounded-full text-xs">
+                    {selectedCharacters.length}
+                  </span>
+                )}
+              </button>
+              <button
+                className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
+                  contextTab === "chapters"
+                    ? "text-blue-400 border-b-2 border-blue-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                onClick={() => setContextTab("chapters")}
+              >
+                📖 章节
+                {selectedChapters.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-600 rounded-full text-xs">
+                    {selectedChapters.length}
+                  </span>
+                )}
+              </button>
+              <button
+                className={`flex-1 px-6 py-4 text-center font-medium transition-colors ${
+                  contextTab === "plots"
+                    ? "text-blue-400 border-b-2 border-blue-400"
+                    : "text-slate-400 hover:text-slate-300"
+                }`}
+                onClick={() => setContextTab("plots")}
+              >
+                📝 情节
+                {selectedPlots.length > 0 && (
+                  <span className="ml-2 px-2 py-0.5 bg-blue-600 rounded-full text-xs">
+                    {selectedPlots.length}
+                  </span>
+                )}
+              </button>
+            </div>
+
+            {/* 人物 Tab 内容 */}
+            {contextTab === "characters" && (
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <label className="text-sm font-medium text-slate-300">
-                    选择人物：
-                  </label>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-slate-400">显示模式</span>
                   <div className="flex bg-slate-700 rounded-lg p-1">
                     <button
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                        characterTab === "summary"
+                        characterDetailMode === "summary"
                           ? "bg-blue-600 text-white"
                           : "text-slate-300 hover:text-white"
                       }`}
-                      onClick={() => setCharacterTab("summary")}
+                      onClick={() => setCharacterDetailMode("summary")}
                     >
                       📝 摘要
                     </button>
                     <button
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                        characterTab === "full"
+                        characterDetailMode === "full"
                           ? "bg-blue-600 text-white"
                           : "text-slate-300 hover:text-white"
                       }`}
-                      onClick={() => setCharacterTab("full")}
+                      onClick={() => setCharacterDetailMode("full")}
                     >
                       📄 全文
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {characters.map((char) => (
-                    <button
-                      key={char.id}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        selectedCharacters.includes(char.id)
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                      }`}
-                      onClick={() => toggleCharacter(char.id)}
-                    >
-                      {char.name}
-                    </button>
-                  ))}
-                </div>
+                {characters.length === 0 ? (
+                  <div className="text-center text-slate-500 py-8">
+                    暂无人物，请先在资源管理中创建
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {characters.map((char) => (
+                      <div
+                        key={char.id}
+                        className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                          selectedCharacters.includes(char.id)
+                            ? "bg-blue-600/20 border-blue-500"
+                            : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                        }`}
+                        onClick={() => toggleCharacter(char.id)}
+                      >
+                        <div className="font-medium mb-1">{char.name}</div>
+                        <div className="text-sm text-slate-400">
+                          {char.gender} · {char.personality}
+                        </div>
+                        {characterDetailMode === "full" && char.background && (
+                          <div className="text-xs text-slate-500 mt-2 line-clamp-2">
+                            {char.background}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
 
-            {chapters.length > 0 && (
+            {/* 章节 Tab 内容 */}
+            {contextTab === "chapters" && (
               <div>
-                <div className="flex items-center gap-2 mb-2">
-                  <label className="text-sm font-medium text-slate-300">
-                    选择章节：
-                  </label>
+                <div className="flex items-center justify-between mb-3">
+                  <span className="text-sm text-slate-400">显示模式</span>
                   <div className="flex bg-slate-700 rounded-lg p-1">
                     <button
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                        chapterContentTab === "summary"
+                        chapterDetailMode === "summary"
                           ? "bg-blue-600 text-white"
                           : "text-slate-300 hover:text-white"
                       }`}
-                      onClick={() => setChapterContentTab("summary")}
+                      onClick={() => setChapterDetailMode("summary")}
                     >
                       📝 摘要
                     </button>
                     <button
                       className={`px-3 py-1 rounded text-xs font-medium transition-colors ${
-                        chapterContentTab === "full"
+                        chapterDetailMode === "full"
                           ? "bg-blue-600 text-white"
                           : "text-slate-300 hover:text-white"
                       }`}
-                      onClick={() => setChapterContentTab("full")}
+                      onClick={() => setChapterDetailMode("full")}
                     >
                       📄 全文
                     </button>
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-2">
-                  {chapters.map((chap) => (
-                    <button
-                      key={chap.id}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                        chapterContentTab === "full" &&
-                        selectedChapterContents.includes(chap.id)
-                          ? "bg-purple-600 text-white"
-                          : chapterContentTab === "summary" &&
-                              selectedChapterDescriptions.includes(chap.id)
-                            ? "bg-purple-600 text-white"
-                            : "bg-slate-700 text-slate-300 hover:bg-slate-600"
-                      }`}
-                      onClick={() => toggleChapter(chap.id)}
-                    >
-                      #{chap.order} {chap.title}
-                    </button>
-                  ))}
-                </div>
+                {chapters.length === 0 ? (
+                  <div className="text-center text-slate-500 py-8">
+                    暂无章节，请先在编辑器中创建
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {chapters.map((chap) => (
+                      <div
+                        key={chap.id}
+                        className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                          selectedChapters.includes(chap.id)
+                            ? "bg-blue-600/20 border-blue-500"
+                            : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                        }`}
+                        onClick={() => toggleChapter(chap.id)}
+                      >
+                        <div className="font-medium mb-1">
+                          #{chap.order} {chap.title}
+                        </div>
+                        {chapterDetailMode === "summary" && chap.description && (
+                          <div className="text-sm text-slate-400 line-clamp-2">
+                            {chap.description}
+                          </div>
+                        )}
+                        {chapterDetailMode === "full" && chap.content && (
+                          <div className="text-sm text-slate-400 line-clamp-3">
+                            {chap.content.substring(0, 200)}...
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* 情节 Tab 内容 */}
+            {contextTab === "plots" && (
+              <div>
+                {plots.length === 0 ? (
+                  <div className="text-center text-slate-500 py-8">
+                    暂无情节，请先在资源管理中创建
+                  </div>
+                ) : (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {plots.map((plot) => (
+                      <div
+                        key={plot.id}
+                        className={`p-4 rounded-lg border transition-colors cursor-pointer ${
+                          selectedPlots.includes(plot.id)
+                            ? "bg-blue-600/20 border-blue-500"
+                            : "bg-slate-800 border-slate-700 hover:border-slate-600"
+                        }`}
+                        onClick={() => togglePlot(plot.id)}
+                      >
+                        <div className="font-medium mb-1">{plot.title}</div>
+                        <div className="text-sm text-slate-400 line-clamp-3">
+                          {plot.content}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             )}
           </div>

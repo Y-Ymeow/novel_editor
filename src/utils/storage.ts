@@ -1,5 +1,5 @@
 import Dexie, { type Table } from 'dexie'
-import type { Novel, Character, Chapter, AppSettings } from '../types'
+import type { Novel, Character, Chapter, Plot, AppSettings } from '../types'
 import { DEFAULT_PROMPTS } from '../types'
 
 // Dexie 数据库定义
@@ -7,6 +7,7 @@ class AINovelDB extends Dexie {
   novels!: Table<Novel>
   characters!: Table<Character>
   chapters!: Table<Chapter>
+  plots!: Table<Plot>
 
   constructor() {
     super('NovelDB')
@@ -14,6 +15,7 @@ class AINovelDB extends Dexie {
       novels: 'id, createdAt, updatedAt',
       characters: 'id, novelId, createdAt',
       chapters: 'id, novelId, order, createdAt, updatedAt',
+      plots: 'id, novelId, createdAt, updatedAt',
     })
   }
 }
@@ -398,6 +400,64 @@ export const storage = {
     }
   },
 
+  // ============ 情节相关 ============
+  async getPlots(novelId?: string): Promise<Plot[]> {
+    const settings = this.getSettings()
+    let plots: Plot[]
+    if (settings.storageType === 'localStorage') {
+      const data = localStorage.getItem('ai_novel_plots')
+      plots = data ? JSON.parse(data) : []
+    } else {
+      plots = await db.plots.toArray()
+    }
+    if (novelId) {
+      return plots.filter(p => p.novelId === novelId)
+    }
+    return plots
+  },
+
+  async savePlot(plot: Plot): Promise<void> {
+    const settings = this.getSettings()
+    if (settings.storageType === 'localStorage') {
+      const plots = await this.getPlots()
+      const index = plots.findIndex(p => p.id === plot.id)
+      if (index !== -1) {
+        plots[index] = plot
+      } else {
+        plots.push(plot)
+      }
+      localStorage.setItem('ai_novel_plots', JSON.stringify(plots))
+    } else {
+      await ensureDBOpen()
+      await db.plots.put(plot)
+    }
+  },
+
+  async updatePlot(id: string, updates: Partial<Plot>): Promise<void> {
+    const settings = this.getSettings()
+    if (settings.storageType === 'localStorage') {
+      const plots = await this.getPlots()
+      const index = plots.findIndex(p => p.id === id)
+      if (index !== -1) {
+        plots[index] = { ...plots[index], ...updates }
+        localStorage.setItem('ai_novel_plots', JSON.stringify(plots))
+      }
+    } else {
+      await ensureDBOpen()
+      await db.plots.update(id, updates)
+    }
+  },
+
+  async deletePlot(id: string): Promise<void> {
+    const settings = this.getSettings()
+    if (settings.storageType === 'localStorage') {
+      const plots = (await this.getPlots()).filter(p => p.id !== id)
+      localStorage.setItem('ai_novel_plots', JSON.stringify(plots))
+    } else {
+      await db.plots.delete(id)
+    }
+  },
+
   // ============ 批量操作 ============
   async saveChapters(chapters: Chapter[]): Promise<void> {
     const settings = this.getSettings()
@@ -446,16 +506,19 @@ export const storage = {
     let novels: Novel[]
     let characters: Character[]
     let chapters: Chapter[]
+    let plots: Plot[]
 
     if (settings.storageType === 'localStorage') {
       novels = lsStorage.getNovels()
       characters = lsStorage.getCharacters()
       chapters = lsStorage.getChapters()
+      plots = await this.getPlots()
     } else {
-      [novels, characters, chapters] = await Promise.all([
+      [novels, characters, chapters, plots] = await Promise.all([
         db.novels.toArray(),
         db.characters.toArray(),
         db.chapters.toArray(),
+        db.plots.toArray(),
       ])
     }
 
@@ -465,6 +528,7 @@ export const storage = {
       novels,
       characters,
       chapters,
+      plots,
     }, null, 2)
   },
 
@@ -480,15 +544,22 @@ export const storage = {
       lsStorage.saveNovels(backup.novels)
       lsStorage.saveCharacters(backup.characters)
       lsStorage.saveChapters(backup.chapters)
+      if (backup.plots) {
+        localStorage.setItem('ai_novel_plots', JSON.stringify(backup.plots))
+      }
     } else {
-      await db.transaction('rw', [db.novels, db.characters, db.chapters], async () => {
+      await db.transaction('rw', [db.novels, db.characters, db.chapters, db.plots], async () => {
         await db.novels.clear()
         await db.characters.clear()
         await db.chapters.clear()
+        await db.plots.clear()
 
         await db.novels.bulkPut(backup.novels)
         await db.characters.bulkPut(backup.characters)
         await db.chapters.bulkPut(backup.chapters)
+        if (backup.plots) {
+          await db.plots.bulkPut(backup.plots)
+        }
       })
     }
   },
@@ -500,11 +571,13 @@ export const storage = {
       localStorage.removeItem(LS_KEYS.NOVELS)
       localStorage.removeItem(LS_KEYS.CHARACTERS)
       localStorage.removeItem(LS_KEYS.CHAPTERS)
+      localStorage.removeItem('ai_novel_plots')
     } else {
-      await db.transaction('rw', [db.novels, db.characters, db.chapters], async () => {
+      await db.transaction('rw', [db.novels, db.characters, db.chapters, db.plots], async () => {
         await db.novels.clear()
         await db.characters.clear()
         await db.chapters.clear()
+        await db.plots.clear()
       })
     }
     localStorage.removeItem(SETTINGS_KEY)

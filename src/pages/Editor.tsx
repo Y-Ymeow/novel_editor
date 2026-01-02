@@ -355,7 +355,7 @@ export default function Editor() {
           <div className="p-4 border-t border-slate-700 space-y-2">
             <button
               className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
-              onClick={() => navigate("/characters")}
+              onClick={() => navigate("/resources")}
             >
               👤 人物卡片
             </button>
@@ -554,7 +554,7 @@ export default function Editor() {
                 className="w-full px-4 py-3 bg-slate-700 hover:bg-slate-600 text-white rounded-xl font-medium transition-colors"
                 onClick={() => {
                   setShowMobileDrawer(false);
-                  navigate("/characters");
+                  navigate("/resources");
                 }}
               >
                 👤 人物卡片

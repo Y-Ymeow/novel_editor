@@ -1,7 +1,7 @@
 import { Routes, Route } from 'react-router-dom'
 import NovelSelect from './pages/NovelSelect'
 import Editor from './pages/Editor'
-import Characters from './pages/Characters'
+import Resources from './pages/Resources'
 import Settings from './pages/Settings'
 
 function App() {
@@ -10,7 +10,7 @@ function App() {
       <Routes>
         <Route path="/" element={<NovelSelect />} />
         <Route path="/editor" element={<Editor />} />
-        <Route path="/characters" element={<Characters />} />
+        <Route path="/resources" element={<Resources />} />
         <Route path="/settings" element={<Settings />} />
       </Routes>
     </div>

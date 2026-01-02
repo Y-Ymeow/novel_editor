@@ -44,6 +44,15 @@ export interface Character {
   createdAt: number
 }
 
+export interface Plot {
+  id: string
+  novelId: string
+  title: string
+  content: string
+  createdAt: number
+  updatedAt: number
+}
+
 export interface Chapter {
   id: string
   novelId: string
@@ -168,4 +177,5 @@ export interface BackupData {
   novels: Novel[]
   characters: Character[]
   chapters: Chapter[]
+  plots: Plot[]
 }
