@@ -91,6 +91,15 @@ export default function AiInput({
     }
   }, [currentNovelId]);
 
+  // 当打开上下文选择器时，重新加载数据以获取最新内容
+  useEffect(() => {
+    if (showContextSelector && currentNovelId) {
+      loadCharacters(currentNovelId);
+      loadChapters(currentNovelId);
+      loadPlots(currentNovelId);
+    }
+  }, [showContextSelector, currentNovelId]);
+
   const loadCharacters = async (novelId: string) => {
     const loaded = await storage.getCharacters(novelId);
     setCharacters(loaded);

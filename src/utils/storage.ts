@@ -224,12 +224,9 @@ export const storage = {
   },
 
   async saveNovel(novel: Novel): Promise<void> {
-    console.log('[saveNovel] 开始保存:', novel.id, novel.title)
     const settings = this.getSettings()
-    console.log('[saveNovel] 当前存储类型:', settings.storageType)
 
     if (settings.storageType === 'localStorage') {
-      console.log('[saveNovel] 使用 LocalStorage')
       const novels = lsStorage.getNovels()
       const index = novels.findIndex(n => n.id === novel.id)
       if (index !== -1) {
@@ -238,17 +235,11 @@ export const storage = {
         novels.push(novel)
       }
       lsStorage.saveNovels(novels)
-      console.log('[saveNovel] LocalStorage 保存完成')
     } else {
-      console.log('[saveNovel] 使用 IndexedDB')
       try {
-        console.log('[saveNovel] 确保数据库已打开...')
         await ensureDBOpen()
-        console.log('[saveNovel] 数据库已确认打开，准备执行 db.novels.put')
         await db.novels.put(novel)
-        console.log('[saveNovel] IndexedDB 保存完成')
       } catch (error) {
-        console.error('[saveNovel] 保存小说失败:', error)
         throw error
       }
     }
@@ -345,12 +336,9 @@ export const storage = {
   },
 
   async saveChapter(chapter: Chapter): Promise<void> {
-    console.log('[saveChapter] 开始保存:', chapter.id, chapter.title)
     const settings = this.getSettings()
-    console.log('[saveChapter] 当前存储类型:', settings.storageType)
 
     if (settings.storageType === 'localStorage') {
-      console.log('[saveChapter] 使用 LocalStorage')
       const chapters = lsStorage.getChapters()
       const index = chapters.findIndex(c => c.id === chapter.id)
       if (index !== -1) {
@@ -359,17 +347,11 @@ export const storage = {
         chapters.push(chapter)
       }
       lsStorage.saveChapters(chapters)
-      console.log('[saveChapter] LocalStorage 保存完成')
     } else {
-      console.log('[saveChapter] 使用 IndexedDB')
       try {
-        console.log('[saveChapter] 确保数据库已打开...')
         await ensureDBOpen()
-        console.log('[saveChapter] 数据库已确认打开，准备执行 db.chapters.put')
         await db.chapters.put(chapter)
-        console.log('[saveChapter] IndexedDB 保存完成')
       } catch (error) {
-        console.error('[saveChapter] 保存章节失败:', error)
         throw error
       }
     }

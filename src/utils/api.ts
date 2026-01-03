@@ -1,48 +1,5 @@
 import { storage } from './storage'
 
-export async function callOpenAI(
-  prompt: string,
-  systemPrompt?: string,
-  model?: string,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  apiConfig?: any
-): Promise<string> {
-  const settings = storage.getSettings()
-  const selectedApi = apiConfig || settings.apis.find(api => api.id === settings.selectedApiId)
-
-  if (!selectedApi) {
-    throw new Error('请先在设置中配置 API')
-  }
-
-  const messages: Array<{ role: string; content: string }> = []
-  if (systemPrompt) {
-    messages.push({ role: 'system', content: systemPrompt })
-  }
-  messages.push({ role: 'user', content: prompt })
-
-  const response = await fetch(`${selectedApi.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${selectedApi.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: model || selectedApi.selectedModel,
-      messages,
-      temperature: 0.8,
-      max_tokens: 2000,
-    }),
-  })
-
-  if (!response.ok) {
-    const error = await response.text()
-    throw new Error(`API 请求失败: ${error}`)
-  }
-
-  const data = await response.json()
-  return data.choices[0]?.message?.content || ''
-}
-
 export async function callOpenAIStream(
   prompt: string,
   systemPrompt?: string,
@@ -227,35 +184,4 @@ export async function callOpenAIStream(
   }
 
   return fullContent
-}
-
-export async function generateFirstChapterDescription(
-  novelTitle: string,
-  novelDescription: string,
-  chapterTitle: string,
-  apiConfig?: any
-): Promise<string> {
-  const systemPrompt = `你是一个专业的长篇小说创作助手。你正在协助作者创作一部长篇小说，现在需要为第一章生成描述。
-
-【创作要求】
-1. 你正在创作长篇小说的**第一章**，这是故事的开始
-2. 生成一个简洁的章节描述，用于指导后续的正文创作
-3. **重要：描述要简洁明了，控制在200-300字以内，抓住核心要点**
-4. 描述应包含：本章的核心情节、主要人物、关键场景、故事的开端
-5. 不要写成正文，不要有对话、详细描写，只写大纲式的内容
-6. 第一章应该为整个故事奠定基调，引入主要人物和核心冲突
-7. 示例格式（仅供参考）：
-   本章讲述主角在XX场景登场，通过XX事件引出核心冲突。主角展现出XX性格特点，为后续XX情节发展埋下伏笔。`
-
-  const userPrompt = `【小说信息】
-标题：${novelTitle || '未设置'}
-简介：${novelDescription || '未设置'}
-
-【章节信息】
-章节标题：${chapterTitle || '未设置'}
-
-【特殊说明】
-这是小说的第一章，没有上一章的信息。请根据小说的标题和简介，为第一章创作一个引人入胜的描述。`
-
-  return await callOpenAI(userPrompt, systemPrompt, undefined, apiConfig)
 }
