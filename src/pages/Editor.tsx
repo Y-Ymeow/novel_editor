@@ -103,6 +103,7 @@ export default function Editor() {
     setChapters(updatedChapters);
     await storage.saveChapters(updatedChapters);
     setCurrentChapter(updatedChapter);
+    setContent(content);
   };
 
   const handleCreateChapter = async () => {
@@ -224,6 +225,7 @@ export default function Editor() {
     setChapters(updatedChapters);
     await storage.saveChapters(updatedChapters);
     setCurrentChapter(updatedChapter);
+    setContent(updatedChapter.content);
     setShowEditDescription(false);
   };
 
