@@ -38,12 +38,6 @@ export default function Editor() {
   // 计算是否有未保存的更改
   const hasChanges = currentChapter ? content !== currentChapter.content : false;
 
-  useEffect(() => {
-    if (isStreaming) {
-      window.scrollTo(0, document.body.scrollHeight);
-    }
-  }, [streamingContent, isStreaming]);
-
   const loadChapters = async (novelId: string) => {
     const loaded = await storage.getChapters(novelId);
     setChapters(loaded);

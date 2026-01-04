@@ -93,15 +93,15 @@ export default function ChapterEditor({
         </div>
       </div>
 
-      <div className="w-full flex-1 max-md:flex-none flex flex-col p-4 overflow-hidden min-h-100">
+      <div className="w-full flex-1 max-md:flex-none flex flex-col p-4 min-h-0">
         {currentChapter ? (
-          <div className="flex-1 flex flex-col">
+          <div className="flex-1 flex flex-col min-h-0" style={{ minHeight: '500px' }}>
             <FullscreenTextarea
               ref={editorTextareaRef}
               value={streamingContent || content}
               onChange={setContent}
               placeholder="开始写作..."
-              className="min-h-100 max-md:min-h-150 flex-1"
+              className="min-h-0 flex-1"
             />
           </div>
         ) : (

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, forwardRef } from "react";
+import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
 
 interface FullscreenTextareaProps {
   value: string;
@@ -16,11 +16,26 @@ const FullscreenTextarea = forwardRef<
   const textareaRef =
     (ref as React.RefObject<HTMLTextAreaElement>) || internalTextareaRef;
 
+  const scrollToBottom = () => {
+    if (textareaRef.current) {
+      textareaRef.current.scrollTop = textareaRef.current.scrollHeight;
+    }
+  };
+
   useEffect(() => {
     if (isFullscreen && textareaRef.current) {
       textareaRef.current.focus();
     }
   }, [isFullscreen]);
+
+  // 当 value 变化时自动滚动到底部
+  useEffect(() => {
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom();
+      });
+    });
+  }, [value]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Escape" && isFullscreen) {
@@ -28,12 +43,21 @@ const FullscreenTextarea = forwardRef<
     }
   };
 
+  // 不再需要 useImperativeHandle，直接使用 textareaRef
+
   return (
     <>
       <div className={`relative flex flex-col ${className}`}>
         <textarea
-          ref={textareaRef}
-          className="w-full flex-1 px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
+          ref={(el) => {
+            textareaRef.current = el;
+            if (typeof ref === 'function') {
+              ref(el);
+            } else if (ref) {
+              (ref as React.MutableRefObject<HTMLTextAreaElement | null>).current = el;
+            }
+          }}
+          className="w-full flex-1 px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none overflow-y-auto"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder={placeholder}
