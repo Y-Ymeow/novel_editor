@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle } from "react";
+import { useState, useRef, useEffect, forwardRef } from "react";
 
 interface FullscreenTextareaProps {
   value: string;
@@ -50,7 +50,9 @@ const FullscreenTextarea = forwardRef<
       <div className={`relative flex flex-col ${className}`}>
         <textarea
           ref={(el) => {
-            textareaRef.current = el;
+            if (el) {
+              textareaRef.current = el;
+            }
             if (typeof ref === 'function') {
               ref(el);
             } else if (ref) {
