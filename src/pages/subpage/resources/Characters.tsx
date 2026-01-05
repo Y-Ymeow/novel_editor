@@ -1,15 +1,10 @@
 import { useState } from 'react'
 import type { Character, Novel } from '../../../types'
 import { storage } from '../../../utils/storage'
-import { buildCharacterPrompt } from '../../../utils/promptManager'
 import Modal from '../../../components/Modal'
 import AiInput from '../../../components/AiInput'
 import FullscreenTextarea from '../../../components/FullscreenTextarea'
-
-const getBatchCharactersPrompt = () => {
-  const settings = storage.getSettings()
-  return settings.prompts?.generateBatchCharacters || ''
-}
+import BatchCreateCharacters from '../../../components/BatchCreateCharacters'
 
 interface FieldHistory {
   [key: string]: string[]
@@ -29,13 +24,8 @@ export default function Characters({
   onCharactersChange
 }: CharactersProps) {
   const [showModal, setShowModal] = useState(false)
-  const [showBatchModal, setShowBatchModal] = useState(false)
-  const [showBatchResultModal, setShowBatchResultModal] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedCharacter, setSelectedCharacter] = useState<Character | null>(null)
-  const [batchInput, setBatchInput] = useState('')
-  const [batchCreatedCharacters, setBatchCreatedCharacters] = useState<Character[]>([])
-  const [generatingCharacterId, setGeneratingCharacterId] = useState<string | null>(null)
 
   const [formData, setFormData] = useState({
     name: '',
@@ -176,17 +166,6 @@ export default function Characters({
     return (fieldHistory[field] || []).length > 1
   }
 
-  const buildCharacterGenerationPrompt = (input: string) => {
-    const novelTitle = currentNovel?.title || ""
-    const novelDescription = currentNovel?.description || ""
-
-    return buildCharacterPrompt(
-      novelTitle,
-      novelDescription,
-      input
-    )
-  }
-
   const handleAiGenerate = (generated: string) => {
     try {
       let jsonStr = generated
@@ -315,244 +294,6 @@ export default function Characters({
     setFormData(prev => ({ ...prev, summary: generated }));
   }
 
-  const handleBatchCreate = async () => {
-    if (!batchInput.trim()) {
-      alert('请输入要创建的人物描述')
-      return
-    }
-
-    if (!currentNovelId) {
-      alert('请先选择小说')
-      return
-    }
-
-    try {
-      const lines = batchInput.split('\n').filter(line => line.trim())
-      const newCharacters: Character[] = []
-
-      for (const line of lines) {
-        if (line.startsWith('{') && line.endsWith('}')) {
-          try {
-            const charData = JSON.parse(line)
-
-            const newCharacter: Character = {
-              id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-              novelId: currentNovelId,
-              name: charData.name || '',
-              gender: charData.gender || '',
-              personality: charData.personality || '',
-              background: charData.background || '',
-              relationships: charData.relationships || '',
-              notes: charData.notes || '',
-              summary: charData.summary || '',
-              createdAt: Date.now(),
-            }
-            newCharacters.push(newCharacter)
-            await storage.saveCharacter(newCharacter)
-            continue
-          } catch (e) {
-            console.error(e)
-          }
-        }
-
-        let name = ''
-        let type = ''
-        let description = ''
-
-        if (line.includes('：') || line.includes(':')) {
-          const parts = line.split(/[:：]/)
-          if (parts.length >= 1) {
-            name = parts[0].trim()
-
-            if (parts.length >= 2) {
-              const remaining = parts.slice(1).join('').trim()
-
-              if (remaining.includes(' - ') || remaining.includes('—')) {
-                const typeDescParts = remaining.split(/\s*[-—]\s*/)
-                type = typeDescParts[0].trim()
-                description = typeDescParts.slice(1).join(' - ').trim()
-              } else {
-                type = remaining
-              }
-            }
-          }
-        } else {
-          type = line.trim()
-        }
-
-        if (!name && type) {
-          name = type
-        }
-
-        let notes = type
-        if (description) {
-          notes += ` - ${description}`
-        }
-
-        const newCharacter: Character = {
-          id: Date.now().toString() + Math.random().toString(36).substr(2, 9),
-          novelId: currentNovelId,
-          name: name,
-          gender: '',
-          personality: '',
-          background: '',
-          relationships: '',
-          notes: notes,
-          createdAt: Date.now(),
-        }
-        newCharacters.push(newCharacter)
-        await storage.saveCharacter(newCharacter)
-      }
-
-      onCharactersChange([...characters, ...newCharacters])
-      setBatchCreatedCharacters(newCharacters)
-      setBatchInput('')
-      setShowBatchModal(false)
-      setShowBatchResultModal(true)
-    } catch (error) {
-      console.error('批量创建失败:', error)
-      alert('批量创建失败，请重试')
-    }
-  }
-
-  const handleBatchAiGenerate = (generated: string) => {
-    try {
-      let jsonStr = generated
-
-      const firstBracket = generated.indexOf('[')
-      const lastBracket = generated.lastIndexOf(']')
-
-      if (firstBracket !== -1 && lastBracket !== -1) {
-        jsonStr = generated.substring(firstBracket, lastBracket + 1)
-      }
-
-      jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
-      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1')
-      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
-      jsonStr = jsonStr.replace(/'/g, '"')
-
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr)
-      } catch (parseError) {
-        try {
-          jsonStr = jsonStr.replace(/new\s+\w+/g, '')
-          jsonStr = jsonStr.replace(/function\s*\(/g, '')
-          parsed = Function.apply(`(${jsonStr})`)
-        } catch (evalError) {
-          console.error(evalError)
-          throw new Error(`JSON 解析失败: ${parseError instanceof Error ? parseError.message : '未知错误'}`)
-        }
-      }
-
-      if (Array.isArray(parsed)) {
-        const entries = parsed.map((item: string | Character | undefined) => {
-          if (typeof item === 'object' && item.name) {
-            return JSON.stringify(item)
-          }
-          return ''
-        }).filter(Boolean)
-
-        if (entries.length > 0) {
-          setBatchInput(entries.join('\n'))
-          alert(`已生成 ${entries.length} 个完整的人物信息，请确认后创建！`)
-        } else {
-          throw new Error('解析的数组中没有找到有效的人物信息')
-        }
-      } else if (typeof parsed === 'object') {
-        if (parsed.name) {
-          setBatchInput(JSON.stringify(parsed))
-          alert(`已生成 1 个完整的人物信息，请确认后创建！`)
-        } else {
-          throw new Error('无法从返回内容中提取人物信息')
-        }
-      } else {
-        throw new Error('AI 返回的不是有效的数组或对象格式')
-      }
-    } catch (error) {
-      console.error('解析 AI 返回内容失败:', error)
-      console.error('原始内容:', generated)
-
-      const names = extractNamesFromText(generated)
-      if (names.length > 0) {
-        setBatchInput(names.join('\n'))
-        alert(`AI 返回的格式有问题，但已尝试提取 ${names.length} 个人物。请检查并补充。`)
-      } else {
-        alert(`无法解析 AI 返回的内容\n\n错误: ${error instanceof Error ? error.message : '未知错误'}\n\n原始内容:\n${generated.slice(0, 300)}...`)
-      }
-    }
-  }
-
-  const extractNamesFromText = (text: string): string[] => {
-    const names: string[] = []
-
-    const namePattern1 = /(?:姓名|name)[:：]\s*([^\n,，]+)/gi
-    let match
-    while ((match = namePattern1.exec(text)) !== null) {
-      const name = match[1].trim()
-      if (name && !names.includes(name)) {
-        names.push(name)
-      }
-    }
-
-    const listPattern = /^[\s]*[-•\d.]+\s*([^\n,，]{2,10})$/gm
-    while ((match = listPattern.exec(text)) !== null) {
-      const name = match[1].trim()
-      if (name && !names.includes(name) && !name.includes(':') && !name.includes('：')) {
-        names.push(name)
-      }
-    }
-
-    if (names.length === 0) {
-      const chineseNamePattern = /[\u4e00-\u9fa5]{2,4}/g
-      while ((match = chineseNamePattern.exec(text)) !== null) {
-        const name = match[0]
-        if (!names.includes(name)) {
-          names.push(name)
-        }
-      }
-    }
-
-    return names
-  }
-
-  const handleGenerateCharacterDetail = async (character: Character) => {
-    setGeneratingCharacterId(character.id)
-
-    try {
-      setFormData({
-        name: character.name,
-        gender: character.gender || '',
-        personality: character.personality || '',
-        background: character.background || '',
-        relationships: character.relationships || '',
-        notes: character.notes || '',
-        summary: character.summary || '',
-      })
-
-      setEditingId(character.id)
-      setShowModal(true)
-      setShowBatchResultModal(false)
-
-      setTimeout(() => {
-        let message = `正在为"${character.name}"生成详细信息。`
-
-        if (character.notes) {
-          message += `\n\n角色类型：${character.notes}`
-        }
-
-        message += `\n\n请点击 Modal 中的"🚀 生成人物卡片"按钮开始生成。`
-
-        alert(message)
-      }, 100)
-    } catch (error) {
-      console.error('生成角色详情失败:', error)
-      alert('生成失败，请手动编辑')
-    } finally {
-      setGeneratingCharacterId(null)
-    }
-  }
-
   return (
     <>
       <div className="max-w-4xl mx-auto space-y-6">
@@ -563,12 +304,12 @@ export default function Characters({
           >
             + 新建人物
           </button>
-          <button
-            className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium transition-colors"
-            onClick={() => { setShowBatchModal(true); setBatchInput('') }}
-          >
-            🤖 批量创建
-          </button>
+          <BatchCreateCharacters
+            currentNovelId={currentNovelId}
+            currentNovel={currentNovel}
+            characters={characters}
+            onCharactersChange={onCharactersChange}
+          />
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {characters.length === 0 ? (
@@ -685,31 +426,33 @@ export default function Characters({
               placeholder="描述你想要创建的人物，例如：一个冷酷的刺客，身穿黑色风衣，有着神秘的过去..."
               buttonText="🚀 生成人物卡片"
               currentNovelId={currentNovelId}
-              systemPrompt={`${buildCharacterGenerationPrompt('')}你是一个专业的小说人物创作助手。请根据用户的描述生成详细的人物卡片信息。
-返回格式必须是 JSON 对象，包含以下字段：
-- name: 姓名
-- gender: 性别
-- personality: 性格特点
-- background: 背景故事
-- relationships: 人物关系
-- notes: 备注信息
-- summary: 人物摘要
+              systemPrompt={(() => {
+                const prompt = storage.getSettings().prompts?.generateCharacter || ''
+                let systemPrompt = prompt
+                  .replace(/\{\{novelTitle\}\}/g, currentNovel?.title || "")
+                  .replace(/\{\{novelDescription\}\}/g, currentNovel?.description || "")
 
-注意：所有字段值都必须是字符串类型，不要返回数组或对象。
+                // 添加额外的上下文信息
+                if (formData.notes) {
+                  systemPrompt += `\n\n【角色类型/定位】\n${formData.notes}`
+                }
 
-只返回 JSON，不要其他文字。
+                if (editingId) {
+                  systemPrompt += `\n\n【当前数据】\n这是更新现有的人物，请基于以下当前数据进行修改或完善：\n`
+                  systemPrompt += `- 姓名：${formData.name}\n`
+                  systemPrompt += `- 性别：${formData.gender}\n`
+                  systemPrompt += `- 性格：${formData.personality}\n`
+                  systemPrompt += `- 背景：${formData.background}\n`
+                  systemPrompt += `- 关系：${formData.relationships}\n`
+                  systemPrompt += `- 备注：${formData.notes}\n`
+                  systemPrompt += `- 摘要：${formData.summary}\n\n`
+                  systemPrompt += `请生成更新后的完整数据，保持人物的基本特征，但根据用户描述进行修改。`
+                } else {
+                  systemPrompt += `\n\n这是创建新人物，请生成完整的新人物数据。`
+                }
 
-${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${editingId ? `这是更新现有的人物，请基于以下当前数据进行修改或完善：
-当前数据：
-- 姓名：${formData.name}
-- 性别：${formData.gender}
-- 性格：${formData.personality}
-- 背景：${formData.background}
-- 关系：${formData.relationships}
-- 备注：${formData.notes}
-- 摘要：${formData.summary}
-
-请生成更新后的完整数据，保持人物的基本特征，但根据用户描述进行修改。` : '这是创建新人物，请生成完整的新人物数据。'}`}
+                return systemPrompt
+              })()}
             />
           </div>
 
@@ -868,141 +611,6 @@ ${formData.notes ? `【角色类型/定位】\n${formData.notes}\n\n` : ''}${edi
         </div>
       </Modal>
 
-      <Modal
-        isOpen={showBatchModal}
-        onClose={() => { setShowBatchModal(false); setBatchInput('') }}
-        title="批量创建人物"
-        maxWidth="2xl"
-        footer={
-          <div className="flex gap-2">
-            <button
-              className="flex-1 px-6 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-medium transition-colors"
-              onClick={handleBatchCreate}
-            >
-              创建
-            </button>
-            <button
-              className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
-              onClick={() => { setShowBatchModal(false); setBatchInput('') }}
-            >
-              取消
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="bg-slate-700/50 rounded-xl p-4 border border-slate-600">
-            <h3 className="text-lg font-semibold mb-3">🤖 AI 生成人物列表</h3>
-            <AiInput
-              onGenerate={handleBatchAiGenerate}
-              placeholder="描述你想要创建的人物，例如：生成3个主要人物，包括主角、反派和配角..."
-              buttonText="🚀 生成人物列表"
-              currentNovelId={currentNovelId}
-              systemPrompt={(() => {
-                const prompt = getBatchCharactersPrompt()
-                return prompt
-                  .replace(/\{\{novelTitle\}\}/g, currentNovel?.title || "")
-                  .replace(/\{\{novelDescription\}\}/g, currentNovel?.description || "")
-                  .replace(/\{\{input\}\}/g, "")
-              })()}
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">人物列表（每行一个）</label>
-            <textarea
-              className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-              rows={10}
-              value={batchInput}
-              onChange={(e) => setBatchInput(e.target.value)}
-              placeholder="张三：主角，勇敢的战士&#10;李四：反派，阴险的谋士&#10;王五：配角，忠诚的侍卫&#10;或者直接输入：&#10;3个反派&#10;2个配角"
-            />
-            <p className="text-xs text-slate-500 mt-2">
-              每行一个人物，可以使用"姓名: 描述"格式，也可以只输入描述（如"3个反派"），系统会保留这些信息用于后续生成
-            </p>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={showBatchResultModal}
-        onClose={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]) }}
-        title={`批量创建完成 - ${batchCreatedCharacters.length} 个人物`}
-        maxWidth="2xl"
-        footer={
-          <div className="flex gap-2">
-            <button
-              className="flex-1 px-6 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-medium transition-colors"
-              onClick={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]) }}
-            >
-              完成
-            </button>
-            <button
-              className="flex-1 px-6 py-3 bg-slate-600 hover:bg-slate-700 text-white rounded-xl font-medium transition-colors"
-              onClick={() => { setShowBatchResultModal(false); setBatchCreatedCharacters([]); setShowBatchModal(true); setBatchInput('') }}
-            >
-              继续创建
-            </button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <div className="bg-blue-900/30 border border-blue-700 rounded-xl p-4">
-            <p className="text-sm text-blue-200">
-              💡 提示：人物已创建成功！如果人物信息已完整，可以直接使用；如果信息不完整，可以点击"生成详情"按钮补充。
-            </p>
-            {characters.length > 0 && (
-              <p className="text-sm text-blue-200 mt-2">
-                📚 当前已有 {characters.length} 个角色，AI 会参考这些角色来生成合理的关系和背景。
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-2 max-h-96 overflow-y-auto">
-            {batchCreatedCharacters.map((char) => {
-              const hasCompleteInfo = char.personality && char.background && char.relationships
-              return (
-                <div
-                  key={char.id}
-                  className="flex items-center justify-between bg-slate-700/50 rounded-xl p-4 border border-slate-600"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-12 h-12 rounded-xl bg-slate-600 flex items-center justify-center text-xl shrink-0">👤</div>
-                    <div className="flex-1 min-w-0">
-                      <h4 className="font-semibold text-white truncate">{char.name}</h4>
-                      {char.summary && (
-                        <p className="text-xs text-purple-400 truncate">
-                          {char.summary}
-                        </p>
-                      )}
-                      <p className="text-xs text-slate-400 mt-1">
-                        {hasCompleteInfo ? '✓ 已完善' : '○ 待完善'}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 shrink-0">
-                    {!hasCompleteInfo && (
-                      <button
-                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        onClick={() => handleGenerateCharacterDetail(char)}
-                        disabled={generatingCharacterId === char.id}
-                      >
-                        {generatingCharacterId === char.id ? '生成中...' : '🤖 生成详情'}
-                      </button>
-                    )}
-                    <button
-                      className="px-4 py-2 bg-slate-600 hover:bg-slate-700 text-white rounded-lg text-sm font-medium transition-colors"
-                      onClick={() => { handleEdit(char); setShowBatchResultModal(false) }}
-                    >
-                      编辑
-                    </button>
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
-      </Modal>
     </>
   )
 }

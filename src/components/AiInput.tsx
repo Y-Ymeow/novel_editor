@@ -328,7 +328,7 @@ export default function AiInput({
               className="p-4 overflow-y-auto grow bg-slate-900"
             >
               {previewContent ? (
-                <div className="whitespace-pre-wrap break-words text-slate-300">
+                <div className="whitespace-pre-wrap wrap-break-word text-slate-300">
                   {(() => {
                     // 使用正则表达式匹配 thinking 标签
                     const thinkingRegex = /<thinking>([\s\S]*?)(<\/thinking>|$)/g;
