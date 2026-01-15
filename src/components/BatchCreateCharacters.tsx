@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { Character, Novel } from '../types'
 import { storage } from '../utils/storage'
+import { callOpenAIWithTools } from '../utils/api'
+import { createCharactersTool } from '../utils/tools'
 import Modal from './Modal'
 import AiInput from './AiInput'
 
@@ -132,59 +134,40 @@ export default function BatchCreateCharacters({
 
   const handleBatchAiGenerate = async (generated: string) => {
     try {
-      let jsonStr = generated
+      const result = await callOpenAIWithTools(
+        generated,
+        [createCharactersTool],
+        getBatchCharactersPrompt()
+          .replace(/\{\{novelTitle\}\}/g, currentNovel?.title || "")
+          .replace(/\{\{novelDescription\}\}/g, currentNovel?.description || "")
+      )
 
-      const firstBracket = generated.indexOf('[')
-      const lastBracket = generated.lastIndexOf(']')
+      if (result.toolCalls && result.toolCalls.length > 0) {
+        const characterToolCall = result.toolCalls.find(tc => tc.name === 'create_characters')
+        
+        if (characterToolCall && characterToolCall.arguments.characters) {
+          const validCharacters = characterToolCall.arguments.characters.filter((item: any) =>
+            typeof item === 'object' && item.name
+          )
 
-      if (firstBracket !== -1 && lastBracket !== -1) {
-        jsonStr = generated.substring(firstBracket, lastBracket + 1)
-      }
-
-      jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
-      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1')
-      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
-      jsonStr = jsonStr.replace(/'/g, '"')
-
-      let parsed;
-      try {
-        parsed = JSON.parse(jsonStr)
-      } catch (parseError) {
-        try {
-          jsonStr = jsonStr.replace(/new\s+\w+/g, '')
-          jsonStr = jsonStr.replace(/function\s*\(/g, '')
-          parsed = Function.apply(`(${jsonStr})`)
-        } catch (evalError) {
-          throw new Error(`JSON 解析失败: ${parseError instanceof Error ? parseError.message : '未知错误'}`)
-        }
-      }
-
-      if (Array.isArray(parsed)) {
-        const validCharacters = parsed.filter((item: any) =>
-          typeof item === 'object' && item.name
-        )
-
-        if (validCharacters.length > 0) {
-          setPendingCharacters(validCharacters)
-          setShowBatchConfirmModal(true)
+          if (validCharacters.length > 0) {
+            setPendingCharacters(validCharacters)
+            setShowBatchConfirmModal(true)
+          } else {
+            throw new Error('工具返回的数组中没有找到有效的人物信息')
+          }
         } else {
-          throw new Error('解析的数组中没有找到有效的人物信息')
+          throw new Error('AI 没有调用 create_characters 工具')
         }
-      } else if (typeof parsed === 'object') {
-        if (parsed.name) {
-          setPendingCharacters([parsed])
-          setShowBatchConfirmModal(true)
-        } else {
-          throw new Error('无法从返回内容中提取人物信息')
-        }
+      } else if (result.content) {
+        console.log('AI返回了文本内容而不是工具调用:', result.content)
+        throw new Error('AI没有调用工具，而是返回了文本内容。这可能是因为:\n1. 模型不支持工具调用 - 请在设置中勾选"支持工具"选项\n2. 模型选择错误 - 请选择支持工具调用的模型\n\n返回内容: ' + result.content.substring(0, 200) + '...')
       } else {
-        throw new Error('AI 返回的不是有效的数组或对象格式')
+        throw new Error('AI 没有返回工具调用，请重试')
       }
     } catch (error) {
-      console.error('解析 AI 返回内容失败:', error)
-      console.error('原始内容:', generated)
-
-      alert(`AI 返回的内容不是有效的 JSON 格式！\n\n错误: ${error instanceof Error ? error.message : '未知错误'}\n\n原始内容:\n${generated.slice(0, 500)}...`)
+      console.error('调用 AI 失败:', error)
+      alert('AI 调用失败: ' + (error instanceof Error ? error.message : '未知错误'))
     }
   }
 
@@ -236,8 +219,6 @@ export default function BatchCreateCharacters({
     setGeneratingCharacterId(character.id)
 
     try {
-      // 这里需要调用父组件的方法来打开编辑弹窗
-      // 由于这个组件是独立的，我们需要通过回调传递
       alert('请在角色列表中点击"编辑"按钮来生成详细信息')
     } catch (error) {
       console.error('生成角色详情失败:', error)

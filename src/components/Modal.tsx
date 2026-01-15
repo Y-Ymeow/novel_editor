@@ -30,7 +30,7 @@ export default function Modal({
   children,
   maxWidth = '2xl',
   showCloseButton = true,
-  closeOnBackdropClick = true,
+  closeOnBackdropClick = false,
   closeOnEscape = true,
   footer,
   className = ''

@@ -100,13 +100,6 @@ export interface ModelParameters {
   maxTokens?: number
   frequencyPenalty?: number
   presencePenalty?: number
-  // Groq 特定参数
-  groqReasoningFormat?: GroqReasoningFormat
-  groqIncludeReasoning?: boolean
-  groqReasoningEffort?: GroqReasoningEffort
-  // Cerebras 特定参数
-  cerebrasReasoningEffort?: 'low' | 'medium' | 'high'
-  cerebrasDisableReasoning?: boolean
 }
 
 export const DEFAULT_MODEL_PARAMETERS: ModelParameters = {
@@ -173,7 +166,7 @@ export const DEFAULT_PROMPTS: PromptConfig = {
 8. 示例格式（仅供参考）：
    本章从XX场景开始，主角正在XX。随后，主角遇到XX人物/事件，发生XX冲突。在XX场景中，通过XX方式，主角解决了问题/遭遇挫折。本章结束时，主角的状态是XX，为后续XX事件埋下伏笔。`,
 
-  generateCharacter: `你是一个专业的小说人物创作助手。请根据用户的描述生成一个详细的人物设定。
+generateCharacter: `你是一个专业的小说人物创作助手。请根据用户的描述生成一个详细的人物设定。
 
 【小说信息】
 标题：{{novelTitle}}
@@ -183,17 +176,14 @@ export const DEFAULT_PROMPTS: PromptConfig = {
 {{input}}
 
 【重要提示】
-⚠️ 必须严格按照 JSON 格式返回，不要使用 Markdown 格式
-⚠️ 不要使用 ### 标题、- 列表等 Markdown 语法
-⚠️ 只返回纯 JSON 对象，不要任何其他文字说明
+🔧 你可以使用 create_characters 工具来创建人物
+🔧 工具会自动处理数据格式，你不需要返回 JSON
+🔧 直接调用工具即可，工具会接收人物列表参数
 
 【创作要求】
 1. 生成一个完整的人物设定，包含姓名、性别、性格、背景、人际关系等
-2. 人物要符合小说的风格和设定
-3. 性格要鲜明，有层次感，避免过于扁平
-4. 背景故事要合理，与小说主题相关
-5. 人际关系要清晰，为后续情节发展提供空间
-6. 必须包含的字段：
+2. 使用 create_characters 工具，传入包含一个人物的列表
+3. 人物必须包含以下信息：
    - name: 姓名
    - gender: 性别
    - personality: 性格特点
@@ -202,20 +192,12 @@ export const DEFAULT_PROMPTS: PromptConfig = {
    - notes: 备注信息
    - summary: 人物摘要（简短概括）
 
-7. 正确的 JSON 格式示例：
-{
-  "name": "张三",
-  "gender": "男",
-  "personality": "阴险狡诈，善于操纵人心，心机深沉",
-  "background": "出身贫寒，通过手段爬上高位，对主角怀有深仇大恨",
-  "relationships": "主角的死对头，暗中策划阴谋",
-  "notes": "主要反派之一，多次与主角正面交锋",
-  "summary": "阴险狡诈的谋士，主角的死对头"
-}
-
-8. 只返回 JSON 对象，不要任何其他文字、标题或说明
-9. 每个字段都要有具体内容，不要留空或写"无"
-10. 所有字段值都必须是字符串类型`,
+4. 人物要符合小说的风格和设定
+5. 性格要鲜明，有层次感，避免过于扁平
+6. 背景故事要合理，与小说主题相关
+7. 人际关系要清晰，为后续情节发展提供空间
+8. 每个字段都要有具体内容，不要留空或写"无"
+9. 所有字段值都必须是字符串类型`,
 
   generateNovelDescription: `你是一个专业的小说创作助手。请根据用户的要求生成小说的描述/简介。
 
@@ -229,21 +211,21 @@ export const DEFAULT_PROMPTS: PromptConfig = {
 4. 语言要生动，有感染力
 5. 避免剧透，只透露必要的设定和冲突`,
 
-  generateBatchCharacters: `你是一个专业的小说人物创作助手。请根据用户的描述生成多个人物的完整信息。
+generateBatchCharacters: `你是一个专业的小说人物创作助手。请根据用户的描述生成多个人物的完整信息。
 
 【小说信息】
 标题：{{novelTitle}}
 简介：{{novelDescription}}
 
 【重要提示】
-⚠️ 必须严格按照 JSON 格式返回，不要使用 Markdown 格式
-⚠️ 不要使用 ### 标题、- 列表等 Markdown 语法
-⚠️ 只返回纯 JSON 数组，不要任何其他文字说明
+🔧 你可以使用 create_characters 工具来创建人物
+🔧 工具会自动处理数据格式，你不需要返回 JSON
+🔧 直接调用工具即可，工具会接收人物列表参数
 
 【创作要求】
 1. 根据用户的描述生成多个人物的完整信息
-2. 返回格式必须是纯 JSON 数组，每个元素包含所有角色字段
-3. 必须包含的字段：
+2. 使用 create_characters 工具，传入人物列表
+3. 每个人物必须包含以下信息：
    - name: 姓名
    - gender: 性别
    - personality: 性格特点
@@ -252,33 +234,13 @@ export const DEFAULT_PROMPTS: PromptConfig = {
    - notes: 备注信息
    - summary: 人物摘要（简短概括）
 
-4. 正确的 JSON 格式示例：
-[
-  {
-    "name": "张三",
-    "gender": "男",
-    "personality": "阴险狡诈，善于操纵人心，心机深沉",
-    "background": "出身贫寒，通过手段爬上高位，对主角怀有深仇大恨",
-    "relationships": "主角的死对头，暗中策划阴谋",
-    "notes": "主要反派之一，多次与主角正面交锋",
-    "summary": "阴险狡诈的谋士，主角的死对头"
-  },
-  {
-    "name": "李四",
-    "gender": "女",
-    "personality": "温柔善良，善解人意",
-    "background": "出身书香门第，受过良好教育",
-    "relationships": "主角的知己，多次帮助主角",
-    "notes": "重要配角，主角的支持者",
-    "summary": "温柔善良的知己，主角的支持者"
-  }
-]
-
-5. 只返回 JSON 数组，不要任何其他文字、标题或说明
-6. 人物要符合小说的风格和设定
-7. 每个字段都要有具体内容，不要留空或写"无"
-8. 人际关系要考虑与其他已存在角色的关联
-9. 所有字段值都必须是字符串类型`,
+4. 人物要符合小说的风格和设定
+5. 性格要鲜明，有层次感，避免过于扁平
+6. 背景故事要合理，与小说主题相关
+7. 人际关系要清晰，为后续情节发展提供空间
+8. 每个字段都要有具体内容，不要留空或写"无"
+9. 人际关系要考虑与其他已存在角色的关联
+10. 所有字段值都必须是字符串类型`,
 
   generateBatchChapters: `你是一个专业的小说创作助手。请根据用户的描述生成多个章节的完整信息。
 

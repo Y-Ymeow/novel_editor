@@ -92,6 +92,32 @@ export default function ApiSettings({ apis, selectedApiId, onApisChange, onSelec
     setSelectedModels(new Set())
   }
 
+  const addManualModel = (modelName: string) => {
+    // 检查是否已存在
+    if (apiFormData.models.some(m => m.name === modelName || m.id === modelName)) {
+      alert('该模型已存在')
+      return
+    }
+
+    const newModel: ModelConfig = {
+      id: modelName,
+      name: modelName,
+      displayName: modelName,
+      canThink: false,
+      canUseTools: true,
+      maxTokens: 8192,
+    }
+
+    const newModels = [...apiFormData.models, newModel]
+    const newSelectedModel = !apiFormData.selectedModel ? modelName : apiFormData.selectedModel
+
+    setApiFormData({
+      ...apiFormData,
+      models: newModels,
+      selectedModel: newSelectedModel,
+    })
+  }
+
   const handleApiSave = () => {
     if (!apiFormData.name.trim()) {
       alert('请输入 API 名称')
@@ -354,6 +380,43 @@ export default function ApiSettings({ apis, selectedApiId, onApisChange, onSelec
                     {isFetchingModels ? '获取中...' : '获取模型列表'}
                   </button>
                 )}
+              </div>
+
+              {/* 手动添加模型 */}
+              <div className="bg-slate-900 rounded-lg p-4 border border-slate-700 mb-4">
+                <label className="block text-sm font-medium text-slate-300 mb-2">手动添加模型</label>
+                <div className="flex gap-2 mb-3">
+                  <input
+                    type="text"
+                    className="flex-1 px-3 py-2 bg-slate-800 border border-slate-600 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="输入模型名称，如 gpt-4-turbo"
+                    id="manualModelInput"
+                    onKeyPress={(e) => {
+                      if (e.key === 'Enter') {
+                        const input = document.getElementById('manualModelInput') as HTMLInputElement
+                        if (input?.value.trim()) {
+                          addManualModel(input.value.trim())
+                          input.value = ''
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm font-medium transition-colors"
+                    onClick={() => {
+                      const input = document.getElementById('manualModelInput') as HTMLInputElement
+                      if (input?.value.trim()) {
+                        addManualModel(input.value.trim())
+                        input.value = ''
+                      }
+                    }}
+                  >
+                    添加
+                  </button>
+                </div>
+                <p className="text-xs text-slate-500">
+                  💡 提示：某些模型可能不会出现在 API 返回的列表中，可以手动添加。
+                </p>
               </div>
 
               {apiFormData.models.length > 0 && (

@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import type { Novel } from '../../../types'
 import { storage } from '../../../utils/storage'
+import { callOpenAIWithTools } from '../../../utils/api'
+import { createChaptersTool } from '../../../utils/tools'
 import Modal from '../../../components/Modal'
 import AiInput from '../../../components/AiInput'
 
@@ -19,50 +21,43 @@ export default function BatchChapterForm({
 }: BatchChapterFormProps) {
   const [batchInput, setBatchInput] = useState('')
 
-  const handleBatchAiGenerate = (generated: string) => {
+  const handleBatchAiGenerate = async (generated: string) => {
     try {
-      let jsonStr = generated
+      const result = await callOpenAIWithTools(
+        generated,
+        [createChaptersTool],
+        getBatchChaptersPrompt()
+      )
 
-      const firstBracket = generated.indexOf('[')
-      const lastBracket = generated.lastIndexOf(']')
+      if (result.toolCalls && result.toolCalls.length > 0) {
+        const chapterToolCall = result.toolCalls.find(tc => tc.name === 'create_chapters')
+        
+        if (chapterToolCall && chapterToolCall.arguments.chapters) {
+          const validChapters = chapterToolCall.arguments.chapters.filter((item: any) =>
+            typeof item === 'object' && item.title
+          )
 
-      if (firstBracket !== -1 && lastBracket !== -1) {
-        jsonStr = generated.substring(firstBracket, lastBracket + 1)
-      }
-
-      jsonStr = jsonStr.replace(/\/\*[\s\S]*?\*\/|\/\/.*/g, '')
-      jsonStr = jsonStr.replace(/,(\s*[}\]])/g, '$1')
-      jsonStr = jsonStr.replace(/([{,]\s*)([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
-      jsonStr = jsonStr.replace(/'/g, '"')
-
-      let parsed
-      try {
-        parsed = JSON.parse(jsonStr)
-      } catch (parseError) {
-        jsonStr = jsonStr.replace(/new\s+\w+/g, '')
-        jsonStr = jsonStr.replace(/function\s*\(/g, '')
-        parsed = Function(`(${jsonStr})`)()
-      }
-
-      if (Array.isArray(parsed)) {
-        const entries = parsed.map((item: any) => {
-          if (typeof item === 'object' && item.title) {
-            return JSON.stringify(item)
+          if (validChapters.length > 0) {
+            const entries = validChapters.map((chapter: any) => {
+              return JSON.stringify(chapter)
+            })
+            setBatchInput(entries.join('\n'))
+            alert(`已生成 ${validChapters.length} 个完整章节信息，请确认后创建！`)
+          } else {
+            throw new Error('工具返回的数组中没有找到有效的章节信息')
           }
-          return ''
-        }).filter(Boolean)
-
-        if (entries.length > 0) {
-          setBatchInput(entries.join('\n'))
-          alert(`已生成 ${entries.length} 个完整章节信息，请确认后创建！`)
         } else {
-          throw new Error('解析的数组中没有找到有效的章节信息')
+          throw new Error('AI 没有调用 create_chapters 工具')
         }
+      } else if (result.content) {
+        console.log('AI返回了文本内容而不是工具调用:', result.content)
+        throw new Error('AI没有调用工具，而是返回了文本内容。这可能是因为:\n1. 模型不支持工具调用 - 请在设置中勾选"支持工具"选项\n2. 模型选择错误 - 请选择支持工具调用的模型\n\n返回内容: ' + result.content.substring(0, 200) + '...')
       } else {
-        throw new Error('AI 返回的不是有效的数组格式')
+        throw new Error('AI 没有返回工具调用，请重试')
       }
     } catch (error) {
-      alert(`无法解析 AI 返回的内容\n\n错误: ${error instanceof Error ? error.message : '未知错误'}`)
+      console.error('调用 AI 失败:', error)
+      alert('AI 调用失败: ' + (error instanceof Error ? error.message : '未知错误'))
     }
   }
 

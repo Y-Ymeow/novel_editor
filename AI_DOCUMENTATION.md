@@ -8,31 +8,52 @@
 
 ## 技术栈
 
-- **前端框架**: React 18+ (Hooks, TypeScript)
+- **前端框架**: React 19+ (Hooks, TypeScript)
 - **构建工具**: Vite 7+
 - **样式**: Tailwind CSS
 - **存储方案**:
   - LocalStorage (默认)
   - IndexedDB
   - MongoDB
-- **AI 集成**: OpenAI 兼容 API，支持流式输出
+- **AI 集成**: 多提供商支持，OpenAI 兼容 API，支持流式输出和工具调用
 
 ## 项目结构
 
 ```
 src/
 ├── components/       # 可复用组件
-│   ├── AiInput.tsx          # AI 输入组件，支持模型选择、上下文参考
-│   └── FullscreenTextarea.tsx # 全屏文本编辑器
+│   ├── AiInput.tsx          # AI 输入组件，支持模型选择、上下文参考、思考模式
+│   ├── BatchCreateCharacters.tsx # 批量创建人物组件
+│   ├── CreateNovelModal.tsx  # 创建小说弹窗
+│   ├── FullscreenTextarea.tsx # 全屏文本编辑器
+│   └── Modal.tsx             # 通用模态框组件
 ├── pages/            # 页面组件
 │   ├── Characters.tsx       # 人物管理页面
 │   ├── Editor.tsx           # 编辑器页面（核心）
 │   ├── NovelSelect.tsx      # 小说选择页面
-│   └── Settings.tsx         # 设置页面
+│   ├── Resources.tsx        # 资源管理页面
+│   ├── Settings.tsx         # 设置页面
+│   └── subpage/             # 子页面
+│       ├── editor/          # 编辑器子页面
+│       │   ├── BatchChapterForm.tsx # 批量创建章节
+│       │   ├── ChapterEditor.tsx     # 章节编辑器
+│       │   ├── ChapterForm.tsx       # 章节表单
+│       │   └── ChapterList.tsx       # 章节列表
+│       ├── resources/       # 资源管理子页面
+│       │   ├── Characters.tsx        # 人物卡片
+│       │   └── Plots.tsx            # 情节管理
+│       └── settings/        # 设置子页面
+│           ├── ApiSettings.tsx        # API配置
+│           ├── BackupSettings.tsx     # 备份设置
+│           ├── DatabaseSettings.tsx   # 数据库设置
+│           ├── ModelParametersSettings.tsx # 模型参数
+│           └── PromptSettings.tsx     # Prompt配置
 ├── types/            # TypeScript 类型定义
-│   └── index.ts              # 核心类型：Novel, Character, Chapter, AppSettings, PromptConfig
+│   └── index.ts              # 核心类型：Novel, Character, Chapter, AppSettings, PromptConfig, ApiConfig, ModelConfig
 ├── utils/            # 工具函数和业务逻辑
-│   ├── api.ts               # API 调用（OpenAI 流式输出）
+│   ├── api.ts               # API 调用（流式输出、工具调用）
+│   ├── apiProvider.ts       # API提供商配置和工具
+│   ├── tools.ts             # 工具定义（Function Calling）
 │   ├── database.ts          # MongoDB 操作
 │   ├── indexedDB.ts         # IndexedDB 封装
 │   ├── promptManager.ts     # Prompt 模板管理
@@ -79,11 +100,37 @@ src/
   novelId: string
   title: string
   order: number
-  description: string    // 章节描述，用于 AI 生成内容
+  description: string    // 章节描述（400-600字详细大纲）
   content: string        // 章节正文
   status: 'draft' | 'in-progress' | 'completed'
   createdAt: number
   updatedAt: number
+}
+```
+
+### ApiConfig（API配置）
+```typescript
+{
+  id: string
+  name: string
+  provider: ApiProviderType  // 'openai' | 'groq' | 'zhipu' | 'cerebras' | 'gemini' | 'custom'
+  baseUrl: string
+  apiKey: string
+  models: ModelConfig[]
+  selectedModel: string
+  autoFetchModels: boolean
+}
+```
+
+### ModelConfig（模型配置）
+```typescript
+{
+  id: string
+  name: string
+  displayName?: string
+  canThink: boolean         // 是否支持思考
+  canUseTools: boolean       // 是否支持工具调用
+  maxTokens: number
 }
 ```
 
@@ -94,299 +141,148 @@ src/
   generateDescription: string  // 生成章节描述的 Prompt
   generateCharacter: string    // 生成人物设定的 Prompt
   generateNovelDescription: string // 生成小说描述的 Prompt
+  generateBatchCharacters: string // 批量创建人物
+  generateBatchChapters: string   // 批量创建章节
 }
 ```
 
 ## 核心功能实现
 
-### 1. AI 输入组件 (AiInput.tsx)
+### 1. API提供商系统 (apiProvider.ts)
 
 **功能**:
-- API 和模型选择
-- 思考模式（reasoning）支持
-- 上下文参考选择（人物、章节）
-- 章节内容类型选择（正文/描述）
-- **摘要/全文模式切换**（人物和章节）
-- 流式输出显示
+- 支持多个API提供商
+- 预定义各提供商的默认配置
+- 支持从API自动获取模型列表
+- 自动检测模型能力（思考、工具调用等）
 
-**关键代码**:
+**提供商配置**:
 ```typescript
-// 添加的状态变量
-const [characterTab, setCharacterTab] = useState<'summary' | 'full'>('summary') // 人物信息显示选项
-const [chapterContentTab, setChapterContentTab] = useState<'summary' | 'full'>('summary') // 章节内容显示选项
-
-// 构建增强的 system prompt
-let enhancedSystemPrompt = systemPrompt || ''
-
-// 添加选中的人物信息
-if (selectedCharacters.length > 0) {
-  enhancedSystemPrompt += '\n\n参考人物信息：\n'
-  selectedCharacters.forEach(charId => {
-    const char = characters.find(c => c.id === charId)
-    if (char) {
-      let charDescription = '';
-      if (characterTab === 'summary') {
-        // 如果有摘要则使用摘要，否则使用性格或背景的简短描述
-        charDescription = char.summary || `${char.personality || ''} ${char.background || ''}`.trim() || '暂无描述'
-      } else {
-        // 使用完整的人物信息
-        charDescription = `姓名：${char.name}，性别：${char.gender || '未指定'}，性格：${char.personality || '未填写'}，背景：${char.background || '未填写'}，关系：${char.relationships || '未填写'}，备注：${char.notes || '无'}`
-      }
-      enhancedSystemPrompt += `- ${char.name}：${charDescription}\n`
-    }
-  })
-}
-
-// 添加选中的章节信息
-if (selectedChapterContents.length > 0) {
-  enhancedSystemPrompt += '\n\n参考章节正文：\n'
-  selectedChapterContents.forEach(chapId => {
-    const chap = chapters.find(c => c.id === chapId)
-    if (chap) {
-      let chapterContent = '';
-      if (chapterContentTab === 'summary') {
-        // 使用章节标题和内容的简短摘要
-        const contentPreview = chap.content ? `${chap.content.substring(0, 200)}...` : '无内容'
-        chapterContent = `章节 ${chap.order}：${chap.title} - ${contentPreview}`
-      } else {
-        // 使用完整的章节内容
-        chapterContent = `章节 ${chap.order}：${chap.title}\n内容：${chap.content || '无内容'}`
-      }
-      enhancedSystemPrompt += `${chapterContent}\n`
-    }
-  })
-}
-if (selectedChapterDescriptions.length > 0) {
-  enhancedSystemPrompt += '\n\n参考章节描述：\n'
-  selectedChapterDescriptions.forEach(chapId => {
-    const chap = chapters.find(c => c.id === chapId)
-    if (chap && chap.description) {
-      let chapterDescription = '';
-      if (chapterContentTab === 'summary') {
-        // 使用简短的描述
-        chapterDescription = `章节 ${chap.order}：${chap.title}\n描述：${chap.description}`
-      } else {
-        // 使用完整的描述信息
-        chapterDescription = `章节 ${chap.order}：${chap.title}\n完整描述：${chap.description}`
-      }
-      enhancedSystemPrompt += `${chapterDescription}\n`
-    }
-  })
-}
-
-// 调用流式 API
-await callOpenAIStream(
-  prompt,
-  enhancedSystemPrompt,
-  selectedModel,
-  selectedApi,
-  enableThinking ? thinkingTokens : 0,
-  (chunk) => {
-    fullContent += chunk
-    if (onStreaming) {
-      onStreaming(fullContent)
-    }
+export const PROVIDER_CONFIGS: Record<ApiProviderType, ProviderConfig> = {
+  openai: {
+    type: 'openai',
+    name: 'OpenAI',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
+  },
+  groq: {
+    type: 'groq',
+    name: 'Groq',
+    defaultBaseUrl: 'https://api.groq.com/openai/v1',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
+  },
+  zhipu: {
+    type: 'zhipu',
+    name: '智谱AI',
+    defaultBaseUrl: 'https://open.bigmodel.cn/api/paas/v4',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
+  },
+  cerebras: {
+    type: 'cerebras',
+    name: 'Cerebras',
+    defaultBaseUrl: 'https://api.cerebras.ai/v1',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
+  },
+  gemini: {
+    type: 'gemini',
+    name: 'Google Gemini',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    supportsModelsApi: false,
+    authHeader: 'x-goog-api-key',
+    authPrefix: '',
+    defaultModels: []
+  },
+  custom: {
+    type: 'custom',
+    name: '自定义',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
   }
-)
-```
-
-### 2. 人物管理页面 (Characters.tsx)
-
-**功能**:
-- 创建和编辑人物卡片
-- **新增摘要字段**
-- AI 生成人物功能
-- AI 生成摘要功能
-
-**关键代码**:
-```typescript
-// 在formData中添加summary字段
-const [formData, setFormData] = useState({
-  name: '',
-  gender: '',
-  avatar: '',
-  personality: '',
-  background: '',
-  relationships: '',
-  notes: '',
-  summary: '', // 添加摘要字段
-})
-
-// 处理摘要AI生成
-const handleSummaryAiGenerate = (generated: string) => {
-  setFormData(prev => ({ ...prev, summary: generated }));
 }
 ```
 
-### 3. Prompt 管理 (promptManager.ts)
-
-**功能**:
-- 提供 4 个默认 Prompt 模板
-- 支持用户自定义 Prompt
-- 自动替换占位符
-
-**占位符系统**:
-- `generateContent`: `{novelTitle}`, `{novelDescription}`, `{characters}`, `{chapterTitle}`, `{chapterDescription}`, `{existingContent}`
-- `generateDescription`: `{novelTitle}`, `{novelDescription}`, `{chapterTitle}`, `{previousChapterTitle}`, `{previousChapterDescription}`
-- `generateCharacter`: `{novelTitle}`, `{novelDescription}`, `{input}`
-- `generateNovelDescription`: `{input}`
-
-**关键代码**:
+**关键函数**:
 ```typescript
-export function buildContentPrompt(params: ContentPromptParams): string {
-  const prompt = getPrompts().generateContent
-  return prompt
-    .replace(/{novelTitle}/g, params.novelTitle || '未知小说')
-    .replace(/{novelDescription}/g, params.novelDescription || '暂无简介')
-    .replace(/{characters}/g, params.characters || '暂无人物')
-    .replace(/{chapterTitle}/g, params.chapterTitle || '未命名章节')
-    .replace(/{chapterDescription}/g, params.chapterDescription || '暂无描述')
-    .replace(/{existingContent}/g, params.existingContent || '')
-}
+// 从API获取模型列表
+export async function fetchModelsFromApi(
+  baseUrl: string,
+  apiKey: string,
+  providerType: ApiProviderType
+): Promise<ModelConfig[]>
+
+// 获取默认模型
+export function getDefaultModels(providerType: ApiProviderType): ModelConfig[]
 ```
 
-### 4. 编辑器页面 (Editor.tsx)
+### 2. 工具调用系统 (tools.ts)
 
-**功能**:
-- 章节列表管理（桌面端侧边栏，移动端抽屉）
-- 章节内容编辑
-- AI 辅助生成
-- 全屏编辑支持
-- 流式输出自动滚动
-
-**关键状态**:
+**工具定义**:
 ```typescript
-const [chapters, setChapters] = useState<Chapter[]>([])
-const [currentChapter, setCurrentChapter] = useState<Chapter | null>(null)
-const [content, setContent] = useState('')
-const [streamingContent, setStreamingContent] = useState('')
-const [isStreaming, setIsStreaming] = useState(false)
-const [showMobileDrawer, setShowMobileDrawer] = useState(false) // 移动端抽屉
-```
-
-**流式输出自动滚动**:
-```typescript
-const editorTextareaRef = useRef<HTMLTextAreaElement>(null)
-
-useEffect(() => {
-  if (isStreaming && editorTextareaRef.current) {
-    editorTextareaRef.current.scrollTop = editorTextareaRef.current.scrollHeight
-  }
-}, [streamingContent, isStreaming])
-```
-
-### 5. 存储系统
-
-#### LocalStorage (storage.ts)
-- 简单键值对存储
-- 自动数据迁移（models 格式兼容）
-- 默认 Prompts 初始化
-
-#### IndexedDB (indexedDB.ts)
-- 版本化数据库（当前版本 2）
-- 支持事务操作
-- 自动升级兼容旧版本
-
-#### MongoDB (database.ts)
-- 使用 Mongoose 连接
-- 支持连接测试
-- 完整的 CRUD 操作
-
-#### 统一接口 (storageWrapper.ts)
-```typescript
-export async function getChapters(novelId?: string): Promise<Chapter[]>
-export async function saveChapters(chapters: Chapter[]): Promise<void>
-export async function getCharacters(novelId?: string): Promise<Character[]>
-export async function saveCharacters(characters: Character[]): Promise<void>
-export async function getNovels(): Promise<Novel[]>
-export async function saveNovels(novels: Novel[]): Promise<void>
-```
-
-## 响应式设计
-
-### 桌面端 (lg及以上)
-- 左侧固定侧边栏（320px）
-- 右侧内容编辑区
-- 章节列表常驻显示
-
-### 移动端 (lg以下)
-- 隐藏左侧侧边栏
-- 顶部显示"章节列表"按钮
-- 点击按钮从左侧滑出抽屉
-- 抽屉包含章节列表和操作按钮
-- 点击遮罩或关闭按钮收起抽屉
-
-**关键样式**:
-```tsx
-{/* 桌面端侧边栏 */}
-<div className="lg:w-80 bg-slate-800 border-r border-slate-700 flex flex-col hidden lg:flex">
-  {/* 章节列表内容 */}
-</div>
-
-{/* 移动端抽屉 */}
-{showMobileDrawer && (
-  <>
-    <div className="fixed inset-0 bg-black/50 z-40 lg:hidden" onClick={() => setShowMobileDrawer(false)} />
-    <div className="fixed inset-y-0 left-0 w-80 bg-slate-800 border-r border-slate-700 z-50 transform transition-transform lg:hidden">
-      {/* 章节列表内容 */}
-    </div>
-  </>
-)}
-```
-
-## AI 集成细节
-
-### 流式输出 (api.ts)
-
-```typescript
-export async function callOpenAIStream(
-  userPrompt: string,
-  systemPrompt: string,
-  model: string,
-  apiConfig: ApiConfig,
-  reasoningTokens: number,
-  onChunk: (chunk: string) => void
-): Promise<void> {
-  const response = await fetch(`${apiConfig.baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${apiConfig.apiKey}`,
-    },
-    body: JSON.stringify({
-      model: model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      stream: true,
-      max_tokens: 2000,
-    }),
-  })
-
-  const reader = response.body?.getReader()
-  const decoder = new TextDecoder()
-
-  while (true) {
-    const { done, value } = await reader!.read()
-    if (done) break
-
-    const chunk = decoder.decode(value)
-    const lines = chunk.split('\n')
-    
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        const data = line.slice(6)
-        if (data === '[DONE]') continue
-        
-        try {
-          const parsed = JSON.parse(data)
-          const content = parsed.choices[0]?.delta?.content
-          if (content) {
-            onChunk(content)
+export const createCharactersTool: Tool = {
+  type: 'function',
+  function: {
+    name: 'create_characters',
+    description: '根据用户的描述创建多个人物角色',
+    parameters: {
+      type: 'object',
+      properties: {
+        characters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              gender: { type: 'string' },
+              personality: { type: 'string' },
+              background: { type: 'string' },
+              relationships: { type: 'string' },
+              notes: { type: 'string' },
+              summary: { type: 'string' }
+            }
           }
-        } catch (e) {
-          // 忽略解析错误
+        }
+      }
+    }
+  }
+}
+
+export const createChaptersTool: Tool = {
+  type: 'function',
+  function: {
+    name: 'create_chapters',
+    description: '根据用户的描述创建多个章节',
+    parameters: {
+      type: 'object',
+      properties: {
+        chapters: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              title: { type: 'string' },
+              description: { type: 'string' }
+            }
+          }
         }
       }
     }
@@ -394,75 +290,296 @@ export async function callOpenAIStream(
 }
 ```
 
-### 思考模式支持
+### 3. API调用系统 (api.ts)
 
-- 检测模型是否支持思考（`canThink` 属性）
-- 用户可启用思考模式并设置思考额度
-- 思考模式下，模型会先进行推理再生成最终答案
+**流式输出**:
+```typescript
+export async function callOpenAIStream(
+  prompt: string,
+  systemPrompt?: string,
+  model?: string,
+  apiConfig?: any,
+  thinkingTokens: number = 0,
+  onChunk?: (chunk: string, fullText: string) => void,
+  onRawData?: (rawData: string) => void
+): Promise<string>
+```
+
+**工具调用**:
+```typescript
+export async function callOpenAIWithTools(
+  prompt: string,
+  tools: any[],
+  systemPrompt?: string,
+  model?: string,
+  apiConfig?: any
+): Promise<ToolCallResult>
+```
+
+**思考模式支持**:
+- Groq: `reasoning_format` (parsed/raw/hidden), `reasoning_effort` (none/default/low/medium/high)
+- Cerebras: `reasoning_effort` (low/medium/high), `disable_reasoning` (boolean)
+- 智谱AI: `thinking` (enabled/disabled)
+- OpenAI: `reasoning_effort` (none/low/medium/high)
+
+### 4. AI输入组件 (AiInput.tsx)
+
+**功能**:
+- 多API提供商支持
+- 模型选择器
+- 思考模式开关
+- 上下文参考选择（人物、章节、情节）
+- 摘要/全文模式切换
+- 流式输出显示
+- 思考过程预览
+
+**关键代码**:
+```typescript
+// 思考模式处理
+const [enableThinking, setEnableThinking] = useState(false)
+const [thinkingTokens, setThinkingTokens] = useState(1000)
+
+// 检查模型是否支持思考
+const model = apis.find(a => a.id === selectedApiId)?.models.find(m => m.name === selectedModel)
+const canThink = model?.canThink
+
+// 调用API
+await callOpenAIStream(
+  prompt,
+  enhancedSystemPrompt,
+  selectedModel,
+  selectedApi,
+  enableThinking ? thinkingTokens : 0,
+  onChunk,
+  onRawData
+)
+```
+
+### 5. 批量创建组件
+
+**BatchCreateCharacters.tsx**:
+```typescript
+const handleBatchAiGenerate = async (generated: string) => {
+  const result = await callOpenAIWithTools(
+    generated,
+    [createCharactersTool],
+    getBatchCharactersPrompt()
+  )
+
+  if (result.toolCalls && result.toolCalls.length > 0) {
+    const characterToolCall = result.toolCalls.find(tc => tc.name === 'create_characters')
+    if (characterToolCall && characterToolCall.arguments.characters) {
+      const validCharacters = characterToolCall.arguments.characters.filter(
+        (item: any) => typeof item === 'object' && item.name
+      )
+      setPendingCharacters(validCharacters)
+      setShowBatchConfirmModal(true)
+    }
+  } else if (result.content) {
+    throw new Error('AI没有调用工具，请检查模型是否支持工具调用')
+  }
+}
+```
+
+**BatchChapterForm.tsx**:
+```typescript
+const handleBatchAiGenerate = async (generated: string) => {
+  const result = await callOpenAIWithTools(
+    generated,
+    [createChaptersTool],
+    getBatchChaptersPrompt()
+  )
+
+  if (result.toolCalls && result.toolCalls.length > 0) {
+    const chapterToolCall = result.toolCalls.find(tc => tc.name === 'create_chapters')
+    if (chapterToolCall && chapterToolCall.arguments.chapters) {
+      const validChapters = chapterToolCall.arguments.chapters.filter(
+        (item: any) => typeof item === 'object' && item.title
+      )
+      // 转换为JSON格式显示
+      setBatchInput(validChapters.map(c => JSON.stringify(c)).join('\n'))
+    }
+  }
+}
+```
+
+### 6. 思考模式实现
+
+**不同提供商的思考参数**:
+
+**Groq**:
+```typescript
+if (providerType === 'groq') {
+  if (thinkingTokens > 0) {
+    requestBody.reasoning_format = 'raw'
+    requestBody.reasoning_effort = 'high'
+  } else {
+    requestBody.reasoning_effort = 'none'
+  }
+}
+```
+
+**Cerebras**:
+```typescript
+if (providerType === 'cerebras') {
+  const modelName = (model || selectedApi.selectedModel).toLowerCase()
+  if (thinkingTokens > 0) {
+    requestBody.max_tokens = thinkingTokens
+    if (modelName.includes('gpt-oss-120b')) {
+      requestBody.reasoning_effort = 'high'
+    }
+    requestBody.disable_reasoning = false
+  } else {
+    requestBody.disable_reasoning = true
+  }
+}
+```
+
+**智谱AI**:
+```typescript
+if (providerType === 'zhipu') {
+  if (thinkingTokens > 0) {
+    requestBody.thinking = { type: 'enabled' }
+  } else {
+    requestBody.thinking = { type: 'disabled' }
+  }
+}
+```
+
+**OpenAI**:
+```typescript
+if (providerType === 'openai') {
+  if (thinkingTokens > 0) {
+    requestBody.max_tokens = thinkingTokens
+    requestBody.reasoning_effort = 'high'
+  } else {
+    requestBody.reasoning_effort = 'none'
+  }
+}
+```
+
+### 7. 全局模型参数
+
+**ModelParameters**:
+```typescript
+{
+  temperature: number      // 0-2，控制输出的随机性
+  topP: number              // 0-1，核采样参数
+  frequencyPenalty: number // -2到2，减少重复内容
+  presencePenalty: number   // -2到2，鼓励谈论新话题
+}
+```
+
+**应用方式**:
+```typescript
+const modelParameters = settings.modelParameters
+
+const requestBody: any = {
+  model: model || selectedApi.selectedModel,
+  messages,
+  temperature: modelParameters.temperature,
+  top_p: modelParameters.topP,
+  stream: true,
+}
+
+if (modelParameters.frequencyPenalty !== undefined) {
+  requestBody.frequency_penalty = modelParameters.frequencyPenalty
+}
+if (modelParameters.presencePenalty !== undefined) {
+  requestBody.presence_penalty = modelParameters.presencePenalty
+}
+```
 
 ## 开发注意事项
 
-### 1. 类型安全
-- 所有数据模型都有完整的 TypeScript 类型定义
-- 使用 `as` 类型断言时要谨慎
-- 优先使用类型推断
+### 1. 添加新的API提供商
 
-### 2. 状态管理
-- 使用 React Hooks 管理组件状态
-- 复杂状态考虑使用 `useReducer`
-- 异步操作使用 `useEffect` 处理
+```typescript
+// 1. 在 types/index.ts 添加新的提供商类型
+export type ApiProviderType = 'openai' | 'groq' | 'zhipu' | 'cerebras' | 'gemini' | 'custom' | 'newprovider'
 
-### 3. 样式约定
-- 使用 Tailwind CSS
-- 颜色：`slate-800`（背景）、`slate-700`（边框）、`blue-600`（主色）、`green-600`（成功）、`red-600`（危险）
-- 间距：`p-4`（标准）、`gap-2`（紧凑）、`gap-4`（宽松）
-- 圆角：`rounded-lg`（小）、`rounded-xl`（中）、`rounded-2xl`（大）
+// 2. 在 apiProvider.ts 添加配置
+export const PROVIDER_CONFIGS: Record<ApiProviderType, ProviderConfig> = {
+  newprovider: {
+    type: 'newprovider',
+    name: 'New Provider',
+    defaultBaseUrl: 'https://api.newprovider.com/v1',
+    supportsModelsApi: true,
+    modelsEndpoint: '/models',
+    authHeader: 'Authorization',
+    authPrefix: 'Bearer',
+    defaultModels: []
+  }
+}
 
-### 4. 性能优化
-- 使用 `useMemo` 和 `useCallback` 优化重渲染
-- 列表渲染添加 `key` 属性
-- 长列表考虑虚拟滚动
+// 3. 在 api.ts 添加特殊参数处理
+if (providerType === 'newprovider') {
+  // 添加新提供商的特殊参数
+}
+```
 
-### 5. 错误处理
-- API 调用添加 try-catch
-- 用户友好的错误提示
-- 关键操作添加确认对话框
+### 2. 添加新的工具
 
-### 6. 数据持久化
-- 所有数据修改后立即保存
-- 使用统一的存储接口
-- 定期提醒用户备份数据
+```typescript
+// 在 tools.ts 添加新工具
+export const newTool: Tool = {
+  type: 'function',
+  function: {
+    name: 'new_tool',
+    description: '工具描述',
+    parameters: {
+      type: 'object',
+      properties: {
+        // 参数定义
+      },
+      required: ['param1']
+    }
+  }
+}
+```
+
+### 3. 调试工具调用
+
+```typescript
+// 在 api.ts 中已添加调试日志
+console.log('Tool Call API Response:', JSON.stringify(data, null, 2))
+console.log('No tool_calls in response. Message:', choice.message)
+```
+
+### 4. 错误处理
+
+```typescript
+// 检查模型是否支持工具调用
+const modelConfig = selectedApi.models.find((m: any) => m.name === (model || selectedApi.selectedModel))
+if (!modelConfig?.canUseTools) {
+  throw new Error(`模型 ${model || selectedApi.selectedModel} 不支持工具调用`)
+}
+
+// 处理AI返回文本而不是工具调用
+if (result.content) {
+  throw new Error('AI没有调用工具，而是返回了文本内容')
+}
+```
 
 ## 常见问题
 
-### Q: 如何添加新的 AI 功能？
-A: 在 `AiInput.tsx` 中添加新的功能按钮，在 `promptManager.ts` 中添加对应的 Prompt 模板。
+### Q: 如何添加新的API提供商？
+A: 按照"添加新的API提供商"章节的步骤操作。
 
-### Q: 如何支持新的存储方式？
-A: 在 `storageWrapper.ts` 中添加新的存储实现，确保接口一致。
+### Q: 为什么AI没有调用工具？
+A: 检查以下几点：
+1. 模型是否支持工具调用（在设置中勾选"支持工具"）
+2. Prompt是否明确告诉AI要使用工具
+3. 查看控制台调试信息
 
-### Q: 如何自定义 Prompt？
-A: 用户可以在设置页面编辑 Prompt，开发者可以在 `promptManager.ts` 中修改默认值。
+### Q: 思考模式如何工作？
+A: 思考模式由provider和模型能力动态控制，不同provider使用不同的参数。启用思考模式会增加API调用成本。
 
-### Q: 如何处理大量数据？
-A: IndexedDB 和 MongoDB 支持大量数据，LocalStorage 有 5-10MB 限制，建议使用 IndexedDB 或 MongoDB。
+### Q: 如何禁用思考模式？
+A: 在AI输入组件中，不勾选"启用思考模式"选项，或将思考额度设置为0。
 
-### Q: 摘要/全文切换功能如何实现？
-A: 在 `AiInput.tsx` 组件中，我们添加了两个状态变量：
-- `characterTab`：控制人物信息显示摘要还是全文
-- `chapterContentTab`：控制章节信息显示摘要还是全文
-用户可以在上下文选择器中切换这些模式，以平衡token使用和信息完整度。
-
-## 未来扩展方向
-
-1. **协作功能**: 多用户协作编辑同一小说
-2. **版本控制**: 章节版本历史和回滚
-3. **导出格式**: 支持 PDF、EPUB 等格式导出
-4. **AI 增强**: 更多 AI 功能，如情节建议、对话优化等
-5. **云端同步**: 支持多设备数据同步
-6. **主题定制**: 支持深色/浅色主题切换
-7. **快捷键**: 编辑器快捷键支持
-8. **统计功能**: 字数统计、写作时间统计等
+### Q: 全局模型参数如何应用？
+A: 全局参数会应用于所有API调用，除非被特定参数覆盖。
 
 ## 相关文档
 
