@@ -1,5 +1,9 @@
+export type ApiProviderType = 'openai' | 'groq' | 'zhipu' | 'cerebras' | 'gemini' | 'custom'
+
 export interface ModelConfig {
+  id: string
   name: string
+  displayName?: string
   canThink: boolean
   canUseTools: boolean
   maxTokens: number
@@ -8,10 +12,23 @@ export interface ModelConfig {
 export interface ApiConfig {
   id: string
   name: string
+  provider: ApiProviderType
   baseUrl: string
   apiKey: string
   models: ModelConfig[]
   selectedModel: string
+  autoFetchModels: boolean
+}
+
+export interface ProviderConfig {
+  type: ApiProviderType
+  name: string
+  defaultBaseUrl: string
+  supportsModelsApi: boolean
+  modelsEndpoint?: string
+  authHeader: string
+  authPrefix: string
+  defaultModels?: ModelConfig[]
 }
 
 export interface DatabaseConfig {
@@ -72,6 +89,31 @@ export interface PromptConfig {
   generateNovelDescription: string
   generateBatchCharacters: string
   generateBatchChapters: string
+}
+
+export type GroqReasoningFormat = 'parsed' | 'raw' | 'hidden'
+export type GroqReasoningEffort = 'none' | 'default' | 'low' | 'medium' | 'high'
+
+export interface ModelParameters {
+  temperature: number
+  topP: number
+  maxTokens?: number
+  frequencyPenalty?: number
+  presencePenalty?: number
+  // Groq 特定参数
+  groqReasoningFormat?: GroqReasoningFormat
+  groqIncludeReasoning?: boolean
+  groqReasoningEffort?: GroqReasoningEffort
+  // Cerebras 特定参数
+  cerebrasReasoningEffort?: 'low' | 'medium' | 'high'
+  cerebrasDisableReasoning?: boolean
+}
+
+export const DEFAULT_MODEL_PARAMETERS: ModelParameters = {
+  temperature: 0.8,
+  topP: 1.0,
+  frequencyPenalty: 0,
+  presencePenalty: 0,
 }
 
 export const DEFAULT_PROMPTS: PromptConfig = {
@@ -280,6 +322,7 @@ export interface AppSettings {
   storageType: 'localStorage' | 'indexedDB' | 'mongodb'
   selectedNovelId: string | null
   prompts: PromptConfig
+  modelParameters: ModelParameters
 }
 
 export interface BackupData {

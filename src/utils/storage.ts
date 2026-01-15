@@ -1,6 +1,6 @@
 import Dexie, { type Table } from 'dexie'
 import type { Novel, Character, Chapter, Plot, AppSettings } from '../types'
-import { DEFAULT_PROMPTS } from '../types'
+import { DEFAULT_PROMPTS, DEFAULT_MODEL_PARAMETERS } from '../types'
 
 // Dexie 数据库定义
 class AINovelDB extends Dexie {
@@ -179,6 +179,7 @@ export const storage = {
         storageType: 'localStorage',
         selectedNovelId: null,
         prompts: DEFAULT_PROMPTS,
+        modelParameters: DEFAULT_MODEL_PARAMETERS,
       }
     }
 
@@ -194,6 +195,7 @@ export const storage = {
         storageType: parsed.storageType || 'localStorage',
         selectedNovelId: parsed.selectedNovelId || null,
         prompts: parsed.prompts || DEFAULT_PROMPTS,
+        modelParameters: parsed.modelParameters || DEFAULT_MODEL_PARAMETERS,
       }
     } catch {
       return {
@@ -206,6 +208,7 @@ export const storage = {
         storageType: 'localStorage',
         selectedNovelId: null,
         prompts: DEFAULT_PROMPTS,
+        modelParameters: DEFAULT_MODEL_PARAMETERS,
       }
     }
   },

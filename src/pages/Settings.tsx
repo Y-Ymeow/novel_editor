@@ -1,16 +1,17 @@
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
-import type { ApiConfig, DatabaseConfig } from '../types'
+import type { ApiConfig, DatabaseConfig, ModelParameters } from '../types'
 import { DEFAULT_PROMPTS } from '../types'
 import { storage } from '../utils/storage'
 import ApiSettings from './subpage/settings/ApiSettings'
 import DatabaseSettings from './subpage/settings/DatabaseSettings'
 import BackupSettings from './subpage/settings/BackupSettings'
 import PromptSettings from './subpage/settings/PromptSettings'
+import ModelParametersSettings from './subpage/settings/ModelParametersSettings'
 
 export default function Settings() {
   const navigate = useNavigate()
-  const [activeTab, setActiveTab] = useState<'api' | 'database' | 'backup' | 'prompt'>('api')
+  const [activeTab, setActiveTab] = useState<'api' | 'database' | 'backup' | 'prompt' | 'model'>('api')
 
   const [apis, setApis] = useState<ApiConfig[]>([])
   const [selectedApiId, setSelectedApiId] = useState<string | null>(null)
@@ -19,6 +20,8 @@ export default function Settings() {
   const [selectedDatabaseId, setSelectedDatabaseId] = useState<string | null>(null)
   const [storageType, setStorageType] = useState<'localStorage' | 'indexedDB' | 'mongodb'>('localStorage')
 
+  const [modelParameters, setModelParameters] = useState<ModelParameters>({ temperature: 0.8, topP: 1.0 })
+
   useEffect(() => {
     const settings = storage.getSettings()
     setApis(settings.apis)
@@ -26,6 +29,7 @@ export default function Settings() {
     setDatabases(settings.databases || [])
     setSelectedDatabaseId(settings.selectedDatabaseId || null)
     setStorageType(settings.storageType || 'localStorage')
+    setModelParameters(settings.modelParameters)
   }, [])
 
   const saveSettings = () => {
@@ -39,6 +43,7 @@ export default function Settings() {
       storageType,
       selectedNovelId: null,
       prompts: DEFAULT_PROMPTS,
+      modelParameters,
     })
     alert('设置已保存')
   }
@@ -100,6 +105,16 @@ export default function Settings() {
             >
               ✨ Prompt 配置
             </button>
+            <button
+              className={`px-4 py-2 rounded-xl font-medium transition-colors ${
+                activeTab === 'model'
+                  ? 'bg-blue-600 text-white'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+              onClick={() => setActiveTab('model')}
+            >
+              🎛️ 模型参数
+            </button>
           </div>
 
           {activeTab === 'api' && (
@@ -125,6 +140,13 @@ export default function Settings() {
           {activeTab === 'backup' && <BackupSettings />}
 
           {activeTab === 'prompt' && <PromptSettings />}
+
+          {activeTab === 'model' && (
+            <ModelParametersSettings
+              parameters={modelParameters}
+              onParametersChange={setModelParameters}
+            />
+          )}
 
           {(apis.length > 0 || databases.length > 0 || storageType) && (
             <div className="mt-6 text-center">
